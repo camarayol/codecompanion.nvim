@@ -321,4 +321,32 @@ T["Utils"]["timestamp_from_iso()"]["returns nil for an unparseable string"] = fu
   h.eq(result, vim.NIL)
 end
 
+T["Utils"]["truncate_width()"] = MiniTest.new_set()
+
+T["Utils"]["truncate_width()"]["leaves text that fits the width untouched"] = function()
+  local result = child.lua([[return utils.truncate_width("hello", 10)]])
+  h.eq(result, "hello")
+end
+
+T["Utils"]["truncate_width()"]["trims wide characters by display cells, not byte length"] = function()
+  local result = child.lua([[
+    local text = string.rep("检", 200)
+    local trimmed = utils.truncate_width(text, 100)
+    return {
+      width = vim.fn.strdisplaywidth(trimmed),
+      chars = vim.fn.strchars(trimmed),
+      bytes = #trimmed,
+      tail = trimmed:sub(-3),
+      intact = trimmed == string.rep("检", 48) .. "...",
+    }
+  ]])
+
+  -- 48 wide characters fit in the 97 cells left by the ellipsis, and none are split
+  h.eq(result.width, 99)
+  h.eq(result.chars, 51)
+  h.eq(result.bytes, 147)
+  h.eq(result.tail, "...")
+  h.eq(result.intact, true)
+end
+
 return T

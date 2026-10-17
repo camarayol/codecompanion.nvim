@@ -8,7 +8,7 @@ CodeCompanion defaults to GitHub Copilot, which is no help if you don't have it.
 
 ## The Options
 
-An _adapter_ connects CodeCompanion to an LLM or an agent. They come in two types: _HTTP_ adapters send requests to a model and use CodeCompanion's own [tools](/usage/chat-buffer/agents-tools), whilst _ACP_ adapters hand the conversation to an agent that runs its own tools. The [CLI interaction](/usage/cli) sits apart from both, running an agent's own interface in a terminal inside Neovim.
+An _adapter_ connects CodeCompanion to an LLM or an agent. They come in two types: _HTTP_ adapters send requests to a model and use CodeCompanion's own [tools](/usage/chat-buffer/agents-tools), whilst _agent_ adapters hand the conversation to an agent that runs its own tools. Agents speak one of two protocols: [ACP](/configuration/adapters-acp) or the lighter line-delimited JSON used by [RPC](/configuration/adapters-rpc) adapters. The [CLI interaction](/usage/cli) sits apart from both, running an agent's own interface in a terminal inside Neovim.
 
 | Option | Adapter | What you need |
 |---|---|---|
@@ -17,9 +17,10 @@ An _adapter_ connects CodeCompanion to an LLM or an agent. They come in two type
 | Local model | `ollama` | Ollama running on your machine or network |
 | OpenAI-compatible endpoint | `openai_compatible` | The endpoint's URL, and a key if it requires one |
 | ACP agent | `claude_code`, `codex`, `gemini_cli`, `opencode`, `copilot_acp`... | The agent installed and signed in |
+| RPC agent | `pi` | The agent installed and signed in |
 | CLI interaction | Any agent you define | The agent's CLI installed |
 
-The first four run CodeCompanion's own tools and work everywhere. An ACP agent runs its own tools and only works in the chat buffer. The CLI interaction runs in its own terminal buffer.
+The first four run CodeCompanion's own tools and work everywhere. An ACP or RPC agent runs its own tools and only works in the chat buffer. The CLI interaction runs in its own terminal buffer.
 
 ### GitHub Copilot
 
@@ -60,6 +61,10 @@ Choose this when you already use Claude Code, Codex or another agent and want it
 
 > [!NOTE]
 > ACP adapters only work in the chat buffer. Inline, cmd and background interactions need an HTTP adapter
+
+### An RPC Agent
+
+Choose this when an agent speaks a line-delimited JSON protocol over stdin and stdout rather than ACP. It behaves much like an ACP agent in the chat buffer: the agent runs its own tools, and setup is a matter of installing and authenticating it. The preset is [pi](https://pi.dev). See [Coding with an Agent](/guides/coding-with-an-agent) and the setup steps in [RPC Adapters](/configuration/adapters-rpc).
 
 ### The CLI Interaction
 

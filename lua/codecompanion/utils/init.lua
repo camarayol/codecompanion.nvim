@@ -315,6 +315,30 @@ function M.pluralize(count, word)
   return count == 1 and word or word .. "s"
 end
 
+---Trim text to a display width, ending with an ellipsis when it was cut
+---@param text string
+---@param width number Maximum display cells
+---@return string
+function M.truncate_width(text, width)
+  if vim.fn.strdisplaywidth(text) <= width then
+    return text
+  end
+
+  -- Measure half the string at a time, as a tool result can be far longer than its label
+  local budget = width - 3
+  local low, high = 0, vim.fn.strchars(text)
+  while low < high do
+    local middle = math.ceil((low + high) / 2)
+    if vim.fn.strdisplaywidth(vim.fn.strcharpart(text, 0, middle)) <= budget then
+      low = middle
+    else
+      high = middle - 1
+    end
+  end
+
+  return vim.fn.strcharpart(text, 0, low) .. "..."
+end
+
 ---Deep copy a table, truncating any string values
 ---@param tbl table
 ---@param max_len? number

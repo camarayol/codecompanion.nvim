@@ -141,6 +141,7 @@ CodeCompanion.chat = function(args)
   args = args or {}
 
   local acp_command
+  local rpc_command
   local adapter
   local messages = args.messages or {}
   local context = args.context or get_context(api.nvim_get_current_buf(), args)
@@ -150,6 +151,8 @@ CodeCompanion.chat = function(args)
     adapter = require("codecompanion.adapters").resolve(args.params.adapter, { model = args.params.model })
     if adapter.type == "acp" and args.params.command then
       acp_command = args.params.command
+    elseif adapter.type == "rpc" and args.params.command then
+      rpc_command = args.params.command
     end
   end
 
@@ -187,6 +190,7 @@ CodeCompanion.chat = function(args)
 
   return require("codecompanion.interactions.chat").new({
     acp_command = acp_command,
+    rpc_command = rpc_command,
     adapter = adapter,
     approval_mode = args.approval_mode,
     auto_submit = auto_submit,
@@ -519,6 +523,7 @@ CodeCompanion.setup = function(opts)
   config.setup(opts)
 
   adapter_config("acp", opts)
+  adapter_config("rpc", opts)
   adapter_config("http", opts)
 
   local cmds = require("codecompanion.commands")

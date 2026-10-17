@@ -39,6 +39,7 @@ doc/usage/ui.md
 doc/configuration/action-palette.md
 doc/configuration/adapters-acp.md
 doc/configuration/adapters-http.md
+doc/configuration/adapters-rpc.md
 doc/configuration/chat-buffer.md
 doc/configuration/callbacks.md
 doc/configuration/context-management.md

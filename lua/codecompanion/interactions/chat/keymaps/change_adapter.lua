@@ -26,16 +26,22 @@ end
 ---@param current_adapter string The currently selected adapter
 ---@return table List of adapter names with current adapter first
 function M.get_adapters_list(current_adapter)
-  local adapters =
-    vim.tbl_deep_extend("force", {}, vim.deepcopy(config.adapters.acp), vim.deepcopy(config.adapters.http))
+  local adapters = vim.tbl_deep_extend(
+    "force",
+    {},
+    vim.deepcopy(config.adapters.acp),
+    vim.deepcopy(config.adapters.rpc),
+    vim.deepcopy(config.adapters.http)
+  )
 
   local hidden = config.adapters.http.opts.hidden
 
   local adapters_list = vim
     .iter(adapters)
     :filter(function(adapter)
-      -- Clear out the acp and http keys
+      -- Clear out the acp, rpc and http keys
       return adapter ~= "acp"
+        and adapter ~= "rpc"
         and adapter ~= "http"
         and adapter ~= "extend"
         and adapter ~= "opts"
@@ -138,6 +144,22 @@ function M.list_acp_models(connection)
   return models
 end
 
+---List available models for an RPC adapter
+---@param connection? CodeCompanion.RPC.Connection
+---@return table|nil
+function M.list_rpc_models(connection)
+  if not connection then
+    return nil
+  end
+
+  local models = connection:get_models()
+  if not models or vim.tbl_count(models.availableModels) < 2 then
+    return nil
+  end
+
+  return models
+end
+
 ---Update the system prompt after adapter change
 ---@param chat CodeCompanion.Chat
 function M.update_system_prompt(chat)
@@ -174,6 +196,15 @@ function M.select_model(chat)
     end
     current_model = acp_models.currentModelId
   end
+  if adapter_type == "rpc" then
+    ---@diagnostic disable-next-line: param-type-mismatch
+    local rpc_models = M.list_rpc_models(chat.rpc_connection)
+    models_list = rpc_models and rpc_models.availableModels or nil
+    if not rpc_models or not models_list then
+      return log:debug("No models to select for the RPC adapter")
+    end
+    current_model = rpc_models.currentModelId
+  end
 
   if not models_list then
     return
@@ -195,7 +226,7 @@ function M.select_model(chat)
       if type(model) == "table" then
         if adapter_type == "http" then
           display = model.description or model.formatted_name or model.id or "Unknown"
-        elseif adapter_type == "acp" then
+        elseif adapter_type == "acp" or adapter_type == "rpc" then
           display = model.name
           if model.description then
             display = string.format("%s - %s", display, model.description)

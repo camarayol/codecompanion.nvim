@@ -350,8 +350,8 @@ end
 function M.compact(chat, opts)
   opts = opts or {}
 
-  if chat.adapter and chat.adapter.type == "acp" then
-    log:debug("[Compaction] Skipped — ACP adapters handle context themselves")
+  if chat.adapter and (chat.adapter.type == "acp" or chat.adapter.type == "rpc") then
+    log:debug("[Compaction] Skipped — agent adapters handle context themselves")
     return false
   end
   if chat._compacting then

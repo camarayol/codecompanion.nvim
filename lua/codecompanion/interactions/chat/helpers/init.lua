@@ -38,6 +38,33 @@ function M.create_acp_connection(chat, cb)
   end)()
 end
 
+---Establishes the connection and reads the session from the agent.
+---@param chat CodeCompanion.Chat
+---@param cb? function
+---@return nil
+function M.create_rpc_connection(chat, cb)
+  ---Run async so as not to block the UI
+  local async_utils = require("codecompanion.utils.async")
+
+  local function call_cb()
+    if cb then
+      vim.schedule(cb)
+    end
+  end
+
+  async_utils.sync(function()
+    local RPCHandler = require("codecompanion.interactions.chat.rpc.handler")
+    local handler = RPCHandler.new(chat)
+
+    if not handler:ensure_connection() then
+      return call_cb()
+    end
+
+    handler:ensure_session()
+    call_cb()
+  end)()
+end
+
 ---Format the given role without any separator
 ---@param role string
 ---@return string

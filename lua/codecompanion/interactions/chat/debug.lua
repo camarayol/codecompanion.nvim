@@ -117,7 +117,7 @@ function Debug:render()
 
   table.insert(lines, "")
   table.insert(lines, '-- Adapter: "' .. adapter.formatted_name .. '"')
-  if adapter.type == "acp" then
+  if adapter.type == "acp" or adapter.type == "rpc" then
     local command
     if adapter.commands and adapter.commands.selected then
       command = adapter.commands.selected
@@ -126,7 +126,7 @@ function Debug:render()
     end
     table.insert(lines, '--   With Command: "' .. table.concat(command, " ") .. '"')
 
-    if self.chat.acp_connection then
+    if adapter.type == "acp" and self.chat.acp_connection then
       for _, opt in ipairs(self.chat.acp_connection:get_config_options()) do
         if opt.type == "select" and opt.currentValue then
           local flattened = ACP.flatten_config_options(opt.options or {})
@@ -174,7 +174,7 @@ function Debug:render()
   table.insert(lines, "local session_id = " .. string.format("%q", self.chat.session_id))
 
   -- Add settings
-  if not config.display.chat.show_settings and adapter.type ~= "acp" then
+  if not config.display.chat.show_settings and adapter.type ~= "acp" and adapter.type ~= "rpc" then
     table.insert(lines, "")
     local keys = {}
 
@@ -289,7 +289,7 @@ function Debug:render()
     table.insert(lines, "")
 
     local display_messages = self.chat.messages
-    if adapter.type == "acp" then
+    if adapter.type == "acp" or adapter.type == "rpc" then
       display_messages, self.excluded_messages = {}, {}
       for _, msg in ipairs(self.chat.messages) do
         if msg.role == config.constants.SYSTEM_ROLE then

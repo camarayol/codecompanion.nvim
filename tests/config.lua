@@ -60,6 +60,21 @@ return {
         roles = { user = "user", assistant = "assistant" },
       },
     },
+    rpc = {
+      test_rpc = {
+        name = "test_rpc",
+        type = "rpc",
+        commands = { default = { "pi", "--mode", "rpc" } },
+        roles = { llm = "assistant", user = "user" },
+        defaults = { timeout = 1000 },
+        opts = { session_flag = "--session" },
+        handlers = {
+          form_messages = function(_, messages)
+            return { message = "test" }
+          end,
+        },
+      },
+    },
     opts = {
       cmd_timeout = 10e3,
     },

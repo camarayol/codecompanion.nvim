@@ -210,7 +210,7 @@ function M.tools()
   local adapter_info = adapter_cache[bufnr]
 
   -- Only show tools for HTTP adapters
-  if not adapter_info or adapter_info.type == "acp" then
+  if not adapter_info or adapter_info.type == "acp" or adapter_info.type == "rpc" then
     return {}
   end
 

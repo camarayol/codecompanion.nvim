@@ -19,7 +19,7 @@ end
 ---@return boolean,string
 function SlashCommand.enabled(chat)
   return vim.tbl_count(chat.adapter.commands) > 1,
-    "The command slash command is only available for ACP adapters with defined commands."
+    "The command slash command is only available for agent adapters with defined commands."
 end
 
 ---Execute the slash command
@@ -55,15 +55,25 @@ function SlashCommand:execute()
     if command then
       Chat.adapter.commands.selected = command
 
-      -- Disconnect the existing ACP process before starting a new one
+      -- Disconnect the existing agent process before starting a new one
       if Chat.acp_connection then
         pcall(function()
           Chat.acp_connection:disconnect()
         end)
         Chat.acp_connection = nil
       end
+      if Chat.rpc_connection then
+        pcall(function()
+          Chat.rpc_connection:disconnect()
+        end)
+        Chat.rpc_connection = nil
+      end
 
-      require("codecompanion.interactions.chat.helpers").create_acp_connection(Chat)
+      if Chat.adapter.type == "rpc" then
+        require("codecompanion.interactions.chat.helpers").create_rpc_connection(Chat)
+      else
+        require("codecompanion.interactions.chat.helpers").create_acp_connection(Chat)
+      end
       utils.notify(string.format("Switched to `%s` command", selected))
     end
   end)

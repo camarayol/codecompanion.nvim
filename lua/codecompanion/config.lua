@@ -64,6 +64,13 @@ local defaults = {
         show_presets = true,
       },
     },
+    rpc = {
+      pi = "pi",
+      extend = nil, -- Per-adapter overrides keyed by config key e.g. { pi = { env = { PI_API_KEY = "ABC-123" } } }
+      opts = {
+        show_presets = true,
+      },
+    },
     opts = {
       cmd_timeout = 20e3, -- Timeout for commands that resolve env variables (milliseconds)
     },
@@ -426,10 +433,10 @@ If you are providing code changes, use the insert_edit_into_file tool (if availa
         ["command"] = {
           path = "interactions.chat.slash_commands.builtin.command",
           description = "Change the command used to start the ACP adapter",
-          ---@param opts { adapter: CodeCompanion.HTTPAdapter|CodeCompanion.ACPAdapter }
+          ---@param opts { adapter: CodeCompanion.HTTPAdapter|CodeCompanion.ACPAdapter|CodeCompanion.RPCAdapter }
           ---@return boolean
           enabled = function(opts)
-            if opts.adapter and opts.adapter.type == "acp" then
+            if opts.adapter and (opts.adapter.type == "acp" or opts.adapter.type == "rpc") then
               return true
             end
             return false
@@ -551,12 +558,17 @@ If you are providing code changes, use the insert_edit_into_file tool (if availa
         ["resume"] = {
           path = "interactions.chat.slash_commands.builtin.resume",
           description = "Resume a previous session",
-          ---@param opts { adapter: CodeCompanion.HTTPAdapter|CodeCompanion.ACPAdapter }
+          ---@param opts { adapter: CodeCompanion.HTTPAdapter|CodeCompanion.ACPAdapter|CodeCompanion.RPCAdapter }
           ---@return boolean
           enabled = function(opts)
             -- ACP agents list their own sessions
             if opts.adapter and opts.adapter.type == "acp" then
               return true
+            end
+            -- RPC agents resume from pi's session files on disk, when the
+            -- adapter declares that it keeps them in that format
+            if opts.adapter and opts.adapter.type == "rpc" then
+              return require("codecompanion.adapters.rpc.sessions").enabled(opts.adapter)
             end
             return require("codecompanion.interactions.chat.sessions").enabled()
           end,

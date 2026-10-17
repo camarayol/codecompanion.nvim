@@ -102,5 +102,6 @@ The protocol version is negotiated during initialization. If an agent selects a 
 
 - [Agent Client Protocol Specification](https://agentclientprotocol.com/) - Official ACP documentation
 - [Configuring ACP Adapters](/configuration/adapters-acp) - Setup instructions for specific agents
+- [Configuring RPC Adapters](/configuration/adapters-rpc) - The line-delimited JSON alternative used by pi
 - [Using Agents and Tools](/usage/chat-buffer/agents-tools) - How to interact with agents in chat
 

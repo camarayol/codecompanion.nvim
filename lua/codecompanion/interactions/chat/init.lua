@@ -4,7 +4,8 @@
 
 ---@class CodeCompanion.Chat
 ---@field acp_connection? CodeCompanion.ACP.Connection The ACP session ID and connection
----@field adapter CodeCompanion.HTTPAdapter|CodeCompanion.ACPAdapter The adapter to use for the chat
+---@field rpc_connection? CodeCompanion.RPC.Connection The RPC connection and session
+---@field adapter CodeCompanion.HTTPAdapter|CodeCompanion.ACPAdapter|CodeCompanion.RPCAdapter The adapter to use for the chat
 ---@field aug number The ID for the autocmd group
 ---@field buffer_context table The context of the buffer that the chat was initiated from
 ---@field bufnr number The buffer number of the chat
@@ -44,8 +45,9 @@
 
 ---@class CodeCompanion.ChatArgs Arguments that can be injected into the chat
 ---@field acp_command? string The command to use to connect via ACP
+---@field rpc_command? string The command to use to connect via RPC
 ---@field acp_session_id? string The ACP session ID which links to this chat buffer
----@field adapter? CodeCompanion.HTTPAdapter|CodeCompanion.ACPAdapter The adapter used in this chat buffer
+---@field adapter? CodeCompanion.HTTPAdapter|CodeCompanion.ACPAdapter|CodeCompanion.RPCAdapter The adapter used in this chat buffer
 ---@field auto_submit? boolean Automatically submit the chat when the chat buffer is created
 ---@field buffer_context? table Context of the buffer that the chat was initiated from
 ---@field callbacks? table<string, (fun(chat: CodeCompanion.Chat, ...: any): any)[]> A table of callback functions that are executed at various points (on_created, on_before_submit, on_submitted, on_tool_output, on_ready, on_completed, on_cancelled, on_closed)
@@ -443,6 +445,13 @@ local function init_adapter(chat, args)
       end
       helpers.create_acp_connection(chat)
     end)
+  elseif chat.adapter.type == "rpc" then
+    vim.schedule(function()
+      if args.rpc_command then
+        chat.adapter.commands.selected = chat.adapter.commands[args.rpc_command]
+      end
+      helpers.create_rpc_connection(chat)
+    end)
   end
 
   return true
@@ -547,7 +556,7 @@ end
 ---@param args CodeCompanion.ChatArgs
 ---@return nil
 local function start_mcp_for_chat(chat, args)
-  if chat.adapter.type == "acp" or args.mcp_servers == "none" then
+  if chat.adapter.type == "acp" or chat.adapter.type == "rpc" or args.mcp_servers == "none" then
     return
   end
   if args.mcp_servers then
@@ -828,12 +837,21 @@ function Chat:change_adapter(adapter, cb)
   end
 
   self.acp_connection = nil
+  if self.rpc_connection then
+    pcall(function()
+      return self.rpc_connection:disconnect()
+    end)
+    self.rpc_connection = nil
+  end
   self._acp_name_map_cache = nil
   self.adapter = new_adapter
   self.ui.adapter = self.adapter
 
   if self.adapter.type == "acp" then
     helpers.create_acp_connection(self, cb)
+    helpers.remove_mcp_tools(self)
+  elseif self.adapter.type == "rpc" then
+    helpers.create_rpc_connection(self, cb)
     helpers.remove_mcp_tools(self)
   else
     if cb then
@@ -853,7 +871,12 @@ end
 ---@return CodeCompanion.Chat
 function Chat:change_model(args)
   local function apply()
-    return adapters.set_model({ acp_connection = self.acp_connection, adapter = self.adapter, model = args.model })
+    return adapters.set_model({
+      acp_connection = self.acp_connection,
+      rpc_connection = self.rpc_connection,
+      adapter = self.adapter,
+      model = args.model,
+    })
   end
 
   if self.adapter.type == "http" then
@@ -863,6 +886,8 @@ function Chat:change_model(args)
     self:set_system_prompt()
     self:apply_settings()
   elseif self.adapter.type == "acp" then
+    apply()
+  elseif self.adapter.type == "rpc" then
     apply()
   end
 
@@ -1332,6 +1357,13 @@ function Chat:_submit_acp(payload)
   require("codecompanion.interactions.chat.acp.handler").new(self):submit(payload)
 end
 
+---Make a request to the agent using the RPC client
+---@param payload table The payload to send to the LLM
+---@return nil
+function Chat:_submit_rpc(payload)
+  require("codecompanion.interactions.chat.rpc.handler").new(self):submit(payload)
+end
+
 ---Determine if a message is too big to send to the LLM
 ---@param message? { content: string }
 ---@return boolean
@@ -1486,6 +1518,8 @@ function Chat:submit(opts)
     self:_submit_http(payload)
   elseif self.adapter.type == "acp" then
     self:_submit_acp(payload)
+  elseif self.adapter.type == "rpc" then
+    self:_submit_rpc(payload)
   end
 
   utils.fire("ChatSubmitted", { bufnr = self.bufnr, id = self.id, type = self.adapter.type })
@@ -1862,6 +1896,8 @@ function Chat:close()
   end
   if self.adapter.type == "acp" and self.acp_connection then
     self.acp_connection:disconnect()
+  elseif self.adapter.type == "rpc" and self.rpc_connection then
+    self.rpc_connection:disconnect()
   end
 end
 
@@ -2057,6 +2093,9 @@ function Chat:update_metadata()
 
   if self.adapter.type == "http" then
     model = adapter_utils.model(self.adapter)
+  elseif self.adapter.type == "rpc" and self.rpc_connection then
+    local rpc_models = self.rpc_connection:get_models()
+    model = rpc_models and rpc_models.currentModelId or "default"
   elseif self.adapter.type == "acp" and self.acp_connection then
     local acp_models = self.acp_connection:get_models()
     model = acp_models and acp_models.currentModelId or "default"
@@ -2104,6 +2143,10 @@ function Chat:update_metadata()
         config_options = config_options,
         id = self.id,
       })
+    end
+  elseif self.adapter.type == "rpc" then
+    if model and model ~= "default" then
+      utils.fire("ChatModel", { bufnr = self.bufnr, id = self.id, model = model })
     end
   end
 end
@@ -2233,9 +2276,11 @@ function Chat.toggle(args)
     -- Adapter resolution from params
     if args.params and args.params.adapter then
       local adapter_name = args.params.adapter
-      local adapter = config.adapters.http[adapter_name] or config.adapters.acp[adapter_name]
+      local adapter = config.adapters.http[adapter_name]
+        or config.adapters.acp[adapter_name]
+        or config.adapters.rpc[adapter_name]
       adapter = require("codecompanion.adapters").resolve(adapter)
-      if args.params.model then
+      if args.params.model and adapter.schema and adapter.schema.model then
         adapter.schema.model.default = args.params.model
       end
       chat_opts.adapter = adapter

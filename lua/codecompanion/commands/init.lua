@@ -24,13 +24,13 @@ local function get_adapters(type)
     if type == "http" then
       config_adapters = vim.deepcopy(config.adapters.http)
     else
-      config_adapters = vim.tbl_deep_extend("force", {}, config.adapters.acp, config.adapters.http)
+      config_adapters = vim.tbl_deep_extend("force", {}, config.adapters.acp, config.adapters.rpc, config.adapters.http)
     end
 
     _cached_adapters[type] = vim
       .iter(config_adapters)
       :filter(function(k, _)
-        return k ~= "acp" and k ~= "http" and k ~= "extend" and k ~= "opts" and not hidden[k]
+        return k ~= "acp" and k ~= "rpc" and k ~= "http" and k ~= "extend" and k ~= "opts" and not hidden[k]
       end)
       :map(function(k, _)
         return k
@@ -222,7 +222,7 @@ return {
           -- Extract the adapter from the command line
           local adapter_name = cmdline:match("adapter=(%S+)")
           if adapter_name then
-            local config_adapters = vim.tbl_deep_extend("force", {}, config.adapters.acp)
+            local config_adapters = vim.tbl_deep_extend("force", {}, config.adapters.acp, config.adapters.rpc)
             local adapter_config = config_adapters[adapter_name]
             if adapter_config then
               local ok, adapter = pcall(require("codecompanion.adapters").resolve, adapter_config)

@@ -46,7 +46,7 @@ end
 ---@param chat CodeCompanion.Chat
 ---@return boolean compacting Whether a compaction is in flight and will end the turn itself
 function M.apply(chat)
-  if chat.adapter and chat.adapter.type == "acp" then
+  if chat.adapter and (chat.adapter.type == "acp" or chat.adapter.type == "rpc") then
     return false
   end
   if not is_enabled(chat) then

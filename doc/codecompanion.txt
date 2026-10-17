@@ -1,4 +1,4 @@
-*codecompanion.txt*         For NVIM v0.11        Last change: 2026 October 01
+*codecompanion.txt*         For NVIM v0.11        Last change: 2026 October 17
 
 ==============================================================================
 Table of Contents                            *codecompanion-table-of-contents*
@@ -50,6 +50,7 @@ Table of Contents                            *codecompanion-table-of-contents*
   - Action Palette                |codecompanion-configuration-action-palette|
   - ACP Adapters                    |codecompanion-configuration-acp-adapters|
   - HTTP Adapters                  |codecompanion-configuration-http-adapters|
+  - RPC Adapters                    |codecompanion-configuration-rpc-adapters|
   - Chat Buffer                      |codecompanion-configuration-chat-buffer|
   - Callbacks                          |codecompanion-configuration-callbacks|
   - Context Management        |codecompanion-configuration-context-management|
@@ -435,10 +436,12 @@ THE OPTIONS ~
 
 An `adapter` connects CodeCompanion to an LLM or an agent. They come in two
 types: `HTTP` adapters send requests to a model and use CodeCompanion's own
-|codecompanion-usage-chat-buffer-agents-tools|, whilst `ACP` adapters hand the
-conversation to an agent that runs its own tools. The |codecompanion-usage-cli|
-sits apart from both, running an agent's own interface in a terminal inside
-Neovim.
+|codecompanion-usage-chat-buffer-agents-tools|, whilst `agent` adapters hand
+the conversation to an agent that runs its own tools. Agents speak one of two
+protocols: |codecompanion-configuration-adapters-acp| or the lighter
+line-delimited JSON used by |codecompanion-configuration-adapters-rpc|
+adapters. The |codecompanion-usage-cli| sits apart from both, running an
+agent's own interface in a terminal inside Neovim.
 
   -----------------------------------------------------------------------
   Option                  Adapter                 What you need
@@ -465,12 +468,15 @@ Neovim.
                           gemini_cli, opencode,   signed in
                           copilot_acp…            
 
+  RPC agent               pi                      The agent installed and
+                                                  signed in
+
   CLI interaction         Any agent you define    The agent's CLI
                                                   installed
   -----------------------------------------------------------------------
-The first four run CodeCompanion's own tools and work everywhere. An ACP agent
-runs its own tools and only works in the chat buffer. The CLI interaction runs
-in its own terminal buffer.
+The first four run CodeCompanion's own tools and work everywhere. An ACP or RPC
+agent runs its own tools and only works in the chat buffer. The CLI interaction
+runs in its own terminal buffer.
 
 
 GITHUB COPILOT
@@ -540,6 +546,16 @@ first. See |codecompanion-guides-coding-with-an-agent| and the setup steps in
 
   [!NOTE] ACP adapters only work in the chat buffer. Inline, cmd and background
   interactions need an HTTP adapter
+
+AN RPC AGENT
+
+Choose this when an agent speaks a line-delimited JSON protocol over stdin and
+stdout rather than ACP. It behaves much like an ACP agent in the chat buffer:
+the agent runs its own tools, and setup is a matter of installing and
+authenticating it. The preset is pi <https://pi.dev>. See
+|codecompanion-guides-coding-with-an-agent| and the setup steps in
+|codecompanion-configuration-adapters-rpc|.
+
 
 THE CLI INTERACTION
 
@@ -6162,6 +6178,153 @@ Use these individual threads as a place to raise issues and ask questions about
 your specific adapters.
 
 
+RPC ADAPTERS                        *codecompanion-configuration-rpc-adapters*
+
+An `RPC adapter` drives an agent that reads and writes newline-delimited JSON
+over stdin and stdout. It's a lighter contract than
+|codecompanion-configuration-adapters-acp|: there's no handshake, no session
+listing and no permission round-trips. CodeCompanion sends commands and reads
+back responses and events.
+
+The only preset is pi <https://pi.dev>.
+
+
+CUSTOMISING AN ADAPTER ~
+
+There are two ways to customise a preset adapter, and you'll see both
+throughout this page:
+
+- **Function** - Use this for full or computed setups. Custom `commands`, `defaults`, or values resolved at call time
+- **extend table** - Use this for static overrides like a different command
+
+
+
+  [!IMPORTANT] The `extend` key is the adapter's name in the config, not the
+  resolved adapter name.
+
+SETTING A DEFAULT ADAPTER ~
+
+You can select an RPC adapter to be the default for all chat interactions:
+
+>lua
+    require("codecompanion").setup({
+      interactions = {
+        chat = {
+          adapter = "pi",
+        },
+      },
+    })
+<
+
+
+HIDING PRESET ADAPTERS ~
+
+By default, the plugin shows all available adapters, including the presets. If
+you prefer to only display the adapters defined in your user configuration, you
+can set the `show_presets` option to `false`:
+
+>lua
+    require("codecompanion").setup({
+      adapters = {
+        rpc = {
+          opts = {
+            show_presets = false,
+          },
+        },
+      },
+    })
+<
+
+
+SETUP: PI ~
+
+To use pi <https://pi.dev> within CodeCompanion:
+
+1. Install <https://pi.dev/docs/latest/cli> pi
+2. Run `pi` in your terminal and authenticate
+3. Select the `pi` adapter in your chat buffer
+
+CodeCompanion runs `pi --mode rpc` to start the agent. On Windows it runs
+`pi.cmd` instead. pi keeps its own session files, so your conversation history
+is preserved between runs and can be reopened with `/resume`.
+
+
+CREATING CUSTOM RPC ADAPTERS ~
+
+Not every RPC-compatible tool will have a built-in adapter. You can define your
+own in your configuration - the example below uses a hypothetical `myagent` CLI
+tool. Use the built-in pi adapter
+<https://github.com/olimorris/codecompanion.nvim/blob/main/lua/codecompanion/adapters/rpc/pi.lua>
+as a reference.
+
+>lua
+    require("codecompanion").setup({
+      adapters = {
+        rpc = {
+          my_agent = function()
+            local helpers = require("codecompanion.adapters.rpc.helpers")
+            return {
+              name = "my_agent",
+              formatted_name = "MyAgent",
+              type = "rpc",
+              roles = {
+                llm = "assistant",
+                user = "user",
+              },
+              commands = {
+                default = {
+                  "myagent",
+                  "--mode",
+                  "rpc",
+                },
+              },
+              defaults = {
+                timeout = 20000, -- 20 seconds
+              },
+              opts = {
+                -- Opt in to /resume when the agent stores sessions in pi's format
+                resume_sessions = true,
+                -- The flag that reopens the active session file when the process restarts
+                session_flag = "--session",
+              },
+              handlers = {
+                setup = function(self)
+                  return true
+                end,
+                form_messages = function(self, messages)
+                  return helpers.form_messages(self, messages)
+                end,
+                on_exit = function(self, code) end,
+              },
+            }
+          end,
+        },
+      },
+    })
+<
+
+
+  [!NOTE] `form_messages` returns a `{ message, images? }` table rather than a
+  list of messages. The agent keeps its own conversation state, so CodeCompanion
+  only sends the messages the agent hasn't seen yet.
+
+LIMITATIONS ~
+
+- **Tool approval**: pi runs its own tools without asking CodeCompanion for permission, so there's no approval step to accept or reject. Tool calls are shown in the chat buffer as they run.
+- **Slash commands**: pi offers its own slash commands through `get_commands`, but CodeCompanion doesn't use them yet, so the `\command` trigger only applies to ACP agents.
+- **Session resume**: The RPC protocol has no command for listing sessions, so CodeCompanion reads pi's session files from disk and loads the one you pick with `switch_session`. Only the active project's sessions are listed, that is, the folder pi grouped the current working directory under, so sessions from other projects are never shown. The session root comes from the agent's own `sessionFile` (reported by `get_state`), so it follows `--session-dir`, `PI_CODING_AGENT_SESSION_DIR` and `PI_CODING_AGENT_DIR` without extra configuration. This is offered only when the adapter sets `opts.resume_sessions = true`, which the pi preset does. Sessions you have exchanged messages in are listed; pi stores its own display names when set, otherwise the first user message is shown. A restored session rebuilds the tool calls the agent made, along with their arguments and output, and the reason any run ended in an error.
+- **Sessions across restarts**: Each process starts a new pi session, because CodeCompanion runs `pi --mode rpc` without naming one. When the process dies mid-conversation, the next submission reopens the session file pi reported, so the agent keeps its context. Switching adapter or changing command starts a new agent session, while the chat buffer keeps showing the old history.
+- **Blocking dialogs**: If the agent opens a blocking dialog (a select, confirm, input or editor request), CodeCompanion answers it as cancelled so the agent isn't left waiting. Non-blocking notifications are ignored.
+- **System prompts**: The protocol has no way to send a system prompt to the agent, so CodeCompanion doesn't merge any with your messages. pi reads its own `AGENTS.md`, and `--append-system-prompt` on the command is the way to add instructions of your own.
+
+
+SEE ALSO ~
+
+- pi RPC documentation <https://pi.dev/docs/latest/rpc> - The protocol CodeCompanion implements
+- |codecompanion-guides-choosing-an-adapter| - How agent adapters compare to HTTP ones
+- |codecompanion-usage-chat-buffer-agents-tools| - How to interact with agents in chat
+
+
 CHAT BUFFER                          *codecompanion-configuration-chat-buffer*
 
 By default, CodeCompanion provides a `chat` interaction that uses a dedicated
@@ -11592,6 +11755,7 @@ SEE ALSO ~
 
 - Agent Client Protocol Specification <https://agentclientprotocol.com/> - Official ACP documentation
 - |codecompanion-configuration-adapters-acp| - Setup instructions for specific agents
+- |codecompanion-configuration-adapters-rpc| - The line-delimited JSON alternative used by pi
 - |codecompanion-usage-chat-buffer-agents-tools| - How to interact with agents in chat
 
 
