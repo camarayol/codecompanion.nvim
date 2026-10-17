@@ -310,6 +310,55 @@ T["Prompt Builder"]["Auto-cancels when no handler is registered"] = function()
   h.eq(false, result.has_optionId)
 end
 
+T["Prompt Builder"]["reports the configured model on request events"] = function()
+  local result = child.lua([[
+    local events_fired = {}
+
+    package.loaded["codecompanion.utils"] = {
+      fire = function(event, data)
+        table.insert(events_fired, { event = event, data = data })
+      end,
+      capitalize = function(s) return s end,
+    }
+
+    package.loaded["codecompanion.acp.prompt_builder"] = nil
+    package.loaded["codecompanion.acp"] = nil
+
+    local Connection = require("codecompanion.acp")
+
+    local adapter = {
+      handlers = { form_messages = function(_, msgs) return msgs end },
+      defaults = {},
+      commands = { default = "noop" },
+    }
+
+    local connection = Connection.new({ adapter = adapter })
+    connection.session_id = "test-session-6"
+    connection.methods = { encode = vim.json.encode }
+    connection._agent_info = agent_info
+    connection._config_options = {
+      {
+        type = "select",
+        id = "model",
+        name = "Model",
+        category = "model",
+        currentValue = "claude-opus",
+        options = { { value = "claude-opus", name = "Claude Opus" } },
+      },
+    }
+    connection.write_message = function() return true end
+
+    connection:session_prompt({ { type = "text", text = "hi" } })
+      :with_options({ bufnr = 1, interaction = "chat" })
+      :send()
+
+    return events_fired[1]
+  ]])
+
+  h.eq(result.event, "RequestStarted")
+  h.eq(result.data.adapter.model, "claude-opus")
+end
+
 T["Prompt Builder"]["handle_error calls error handler and fires event"] = function()
   local result = child.lua([[
     local error_handler_called = false

@@ -93,11 +93,12 @@ function PromptBuilder:send()
   -- Set up request options for events
   if not vim.tbl_isempty(self.options) then
     self.options.id = math.random(10000000)
+    local models = self.connection:get_models()
     self.options.adapter = {
       name = self.connection.adapter.name,
       formatted_name = self.connection.adapter.formatted_name,
       type = self.connection.adapter.type,
-      model = nil,
+      model = models and models.currentModelId,
     }
 
     -- Fire request started

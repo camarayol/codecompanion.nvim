@@ -137,13 +137,14 @@ function RPCHandler:create_and_send_prompt(payload)
 
   local formatted = self.chat.adapter.handlers.form_messages(self.chat.adapter, payload.messages)
 
+  local models = conn:get_models()
   self._event_data = {
     id = tostring(math.random(10000000)),
     adapter = {
       name = self.chat.adapter.name,
       formatted_name = self.chat.adapter.formatted_name,
       type = self.chat.adapter.type,
-      model = nil,
+      model = models and models.currentModelId,
     },
     bufnr = self.chat.bufnr,
     interaction = "chat",

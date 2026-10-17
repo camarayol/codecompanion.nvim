@@ -23,6 +23,7 @@ T["RPC Handler"] = new_set({
             is_ready = function() return connected end,
             connect = function() return connected end,
             ensure_session = function() return true end,
+            get_models = function() return { availableModels = {}, currentModelId = "test-model" } end,
             set_event_handler = function() end,
             prompt = function() return { success = true, data = {} } end,
             abort = function() aborted = (aborted or 0) + 1 end,
@@ -113,6 +114,28 @@ T["RPC Handler"]["fires RequestFinished when a request is cancelled"] = function
       { name = "RequestFinished", status = "cancelled" },
     }
   )
+end
+
+T["RPC Handler"]["request events carry the model the agent reported"] = function()
+  local result = child.lua([[
+    local handler = require("codecompanion.interactions.chat.rpc.handler").new(fake_chat())
+    handler:submit({ messages = {} })
+    handler.chat.current_request.cancel()
+
+    local payloads = {}
+    for _, event in ipairs(events) do
+      if event.name == "RequestStarted" or event.name == "RequestFinished" then
+        table.insert(payloads, { name = event.name, model = event.data.adapter.model })
+      end
+    end
+
+    return payloads
+  ]])
+
+  h.eq(result, {
+    { name = "RequestStarted", model = "test-model" },
+    { name = "RequestFinished", model = "test-model" },
+  })
 end
 
 T["RPC Handler"]["submit()"] = new_set()
