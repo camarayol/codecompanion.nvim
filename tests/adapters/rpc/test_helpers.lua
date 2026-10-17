@@ -17,8 +17,8 @@ T["RPC Adapter Helpers"] = new_set({
         tags = require("codecompanion.interactions.shared.tags")
         adapter = { roles = { user = "user", llm = "assistant" } }
 
-        function form(messages)
-          return helpers.form_messages(adapter, messages)
+        function build(messages)
+          return helpers.build_messages(adapter, { messages = messages })
         end
       ]])
     end,
@@ -26,11 +26,11 @@ T["RPC Adapter Helpers"] = new_set({
   },
 })
 
-T["RPC Adapter Helpers"]["form_messages()"] = new_set()
+T["RPC Adapter Helpers"]["build_messages()"] = new_set()
 
-T["RPC Adapter Helpers"]["form_messages()"]["joins the chunks the agent has not seen"] = function()
+T["RPC Adapter Helpers"]["build_messages()"]["joins the chunks the agent has not seen"] = function()
   local result = child.lua([[
-    return form({
+    return build({
       { role = "user", content = "Look at this", _meta = { tag = tags.RULES } },
       { role = "user", content = "And this", _meta = {} },
     })
@@ -39,9 +39,9 @@ T["RPC Adapter Helpers"]["form_messages()"]["joins the chunks the agent has not 
   h.eq(result.message, "Look at this\n\nAnd this")
 end
 
-T["RPC Adapter Helpers"]["form_messages()"]["IGNORES messages the agent has already been sent"] = function()
+T["RPC Adapter Helpers"]["build_messages()"]["IGNORES messages the agent has already been sent"] = function()
   local result = child.lua([[
-    return form({
+    return build({
       { role = "user", content = "Sent earlier", _meta = { sent = true } },
       { role = "assistant", content = "The agent's own reply", _meta = {} },
       { role = "user", content = "New question", _meta = {} },
@@ -51,9 +51,9 @@ T["RPC Adapter Helpers"]["form_messages()"]["IGNORES messages the agent has alre
   h.eq(result.message, "New question")
 end
 
-T["RPC Adapter Helpers"]["form_messages()"]["collects images apart from the message text"] = function()
+T["RPC Adapter Helpers"]["build_messages()"]["collects images apart from the message text"] = function()
   local result = child.lua([[
-    return form({
+    return build({
       { role = "user", content = "iVBORw0KGgo=", _meta = { tag = tags.IMAGE }, context = { mimetype = "image/png" } },
       { role = "user", content = "What is in this image?", _meta = {} },
     })
@@ -63,9 +63,9 @@ T["RPC Adapter Helpers"]["form_messages()"]["collects images apart from the mess
   h.eq(result.images, { { type = "image", data = "iVBORw0KGgo=", mimeType = "image/png" } })
 end
 
-T["RPC Adapter Helpers"]["form_messages()"]["names the file a context item came from"] = function()
+T["RPC Adapter Helpers"]["build_messages()"]["names the file a context item came from"] = function()
   local result = child.lua([[
-    return form({
+    return build({
       { role = "user", content = "local x = 1", _meta = { tag = tags.BUFFER }, context = { path = "/tmp/init.lua" } },
     })
   ]])

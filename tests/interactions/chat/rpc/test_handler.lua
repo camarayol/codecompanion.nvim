@@ -35,7 +35,7 @@ T["RPC Handler"] = new_set({
               formatted_name = "Pi",
               type = "rpc",
               commands = { selected = { "pi", "--mode", "rpc" } },
-              handlers = { form_messages = function() return { message = "hi" } end },
+              handlers = { request = { build_messages = function() return { message = "hi" } end } },
             },
             bufnr = 1,
             messages = {},
@@ -53,19 +53,20 @@ T["RPC Handler"] = new_set({
             return #self.buffer_messages, #self.buffer_messages
           end
 
-          function chat:update_buf_line(line_number, content)
-            local message = self.buffer_messages[line_number]
+          function chat:update_buf_line(line_args)
+            local message = self.buffer_messages[line_args.line_number]
             if not message then
               return false
             end
-            message.content = content
-            return true, line_number
+            message.content = line_args.content
+            return true, line_args.line_number
           end
 
-          function chat:done(output, _, _, _, done_opts)
+          function chat:done(done_args)
             table.insert(self.completed, {
-              output = output and table.concat(output, "") or nil,
-              error = done_opts and done_opts.error,
+              output = done_args.output and table.concat(done_args.output, "") or nil,
+              error = done_args.error,
+              status = done_args.status,
             })
           end
 
@@ -160,6 +161,34 @@ T["RPC Handler"]["submit()"]["shows an error in the chat buffer when the agent c
   h.eq(result.error ~= nil, true)
 end
 
+T["RPC Handler"]["submit()"]["shows an error when the adapter has no build_messages handler"] = function()
+  local result = child.lua([[
+    local chat = fake_chat()
+    chat.adapter.handlers = {}
+    local handler = require("codecompanion.interactions.chat.rpc.handler").new(chat)
+
+    handler:submit({ messages = {} })
+
+    local function fired(name)
+      return #vim.tbl_filter(function(event)
+        return event.name == name
+      end, events)
+    end
+
+    return {
+      status = chat.status,
+      error = chat.completed[1] and chat.completed[1].error,
+      started = fired("RequestStarted"),
+      finished = fired("RequestFinished"),
+    }
+  ]])
+
+  h.eq(result.status, "error")
+  h.eq(result.error:find("build_messages", 1, true) ~= nil, true)
+  h.eq(result.started, 0)
+  h.eq(result.finished, 0)
+end
+
 T["RPC Handler"]["message_end"] = new_set()
 
 T["RPC Handler"]["message_end"]["surfaces the error a provider reported"] = function()
@@ -226,6 +255,20 @@ T["RPC Handler"]["message_end"]["DOES NOT repeat text the deltas already streame
 
   h.eq(result.chunks, 1)
   h.eq(result.output, "hello there")
+end
+
+T["RPC Handler"]["agent_settled"] = new_set()
+
+T["RPC Handler"]["agent_settled"]["marks an aborted run as stopped"] = function()
+  local result = child.lua([[
+    local handler = require("codecompanion.interactions.chat.rpc.handler").new(fake_chat())
+    handler:submit({ messages = {} })
+    handler:process_event({ type = "agent_settled", aborted = true })
+
+    return { status = handler.chat.completed[1] and handler.chat.completed[1].status }
+  ]])
+
+  h.eq(result.status, "stopped")
 end
 
 T["RPC Handler"]["tool events"] = new_set()

@@ -16,12 +16,54 @@ local shared = require("codecompanion.adapters.shared")
 ---@field defaults? table Additional options for the adapter
 ---@field env? table Environment variables which can be referenced in the command
 ---@field env_replaced? table Replacement of environment variables with their actual values
----@field handlers table Functions which link the output from the agent to CodeCompanion
----@field handlers.setup? fun(self: CodeCompanion.RPCAdapter): boolean
----@field handlers.form_messages? fun(self: CodeCompanion.RPCAdapter, messages: table): { message: string, images?: table[] }
----@field handlers.on_exit? fun(self: CodeCompanion.RPCAdapter, code: number): nil
+---@field handlers CodeCompanion.RPCAdapter.Handlers Functions which link the output from the agent to CodeCompanion
+
+---@class CodeCompanion.RPCAdapter.Handlers.Lifecycle
+---@field setup? fun(self: CodeCompanion.RPCAdapter): boolean
+---@field on_exit? fun(self: CodeCompanion.RPCAdapter, args: { code: number }): nil
+
+---@class CodeCompanion.RPCAdapter.Handlers.Request
+---@field build_messages? fun(self: CodeCompanion.RPCAdapter, args: { messages: table }): { message: string, images?: table[] }
+
+---@class CodeCompanion.RPCAdapter.Handlers
+---@field lifecycle? CodeCompanion.RPCAdapter.Handlers.Lifecycle
+---@field request? CodeCompanion.RPCAdapter.Handlers.Request
 
 local Adapter = {}
+
+---Find a handler on the adapter
+---@param adapter CodeCompanion.RPCAdapter
+---@param name string
+---@return function|nil
+local function find_handler(adapter, name)
+  local handlers = adapter.handlers
+  if not handlers then
+    return nil
+  end
+
+  for _, category in ipairs({ "lifecycle", "request" }) do
+    if handlers[category] and handlers[category][name] then
+      return handlers[category][name]
+    end
+  end
+
+  return nil
+end
+
+Adapter.get_handler = find_handler
+
+---Call a handler on the adapter
+---@param adapter CodeCompanion.RPCAdapter
+---@param name string
+---@param args? table
+---@return any|nil
+function Adapter.call_handler(adapter, name, args)
+  local handler = find_handler(adapter, name)
+  if not handler then
+    return nil
+  end
+  return handler(adapter, args or {})
+end
 
 ---@return CodeCompanion.RPCAdapter
 function Adapter.new(args)

@@ -16,21 +16,27 @@ T["RPC Connection"] = new_set({
         timers = {}
         stdin_writes = {}
         stdin_closed = 0
+        job_started = 0
         stdout_fn = nil
         exit_fn = nil
 
-        function rpc_conn()
+        function rpc_conn(handlers)
           local Connection = require("codecompanion.rpc")
           local adapter = vim.deepcopy(require("codecompanion.config").adapters.rpc.test_rpc)
+          if handlers then
+            adapter.handlers = vim.tbl_deep_extend("force", adapter.handlers or {}, handlers)
+          end
 
           timers = {}
           stdin_writes = {}
           stdin_closed = 0
+          job_started = 0
 
           conn = Connection.new({
             adapter = adapter,
             opts = {
               job = function(command, spawn_opts, on_exit)
+                job_started = job_started + 1
                 stdout_fn = spawn_opts.stdout
                 exit_fn = on_exit
                 return {
@@ -189,6 +195,19 @@ T["RPC Connection"]["send_command()"]["fires the deadline when the agent never r
   h.eq(result.no_pending, true)
 end
 
+T["RPC Connection"]["start_agent_process()"] = new_set()
+
+T["RPC Connection"]["start_agent_process()"]["does not start the agent when the setup handler fails"] = function()
+  local result = child.lua([[
+    rpc_conn({ lifecycle = { setup = function() return false end } })
+
+    return { ready = conn:is_ready(), started = job_started }
+  ]])
+
+  h.eq(result.ready, false)
+  h.eq(result.started, 0)
+end
+
 T["RPC Connection"]["process exit"] = new_set()
 
 T["RPC Connection"]["process exit"]["releases pending waits and clears deadlines"] = function()
@@ -236,6 +255,19 @@ T["RPC Connection"]["process exit"]["marks a signalled death with a nil exit cod
   ]])
 
   h.eq(result.released, true)
+  h.eq(result.gone, true)
+end
+
+T["RPC Connection"]["process exit"]["passes the exit code to the adapter's on_exit handler"] = function()
+  local result = child.lua([[
+    rpc_conn({ lifecycle = { on_exit = function(_, args) exit_args = args end } })
+
+    exit_fn({ code = 3, signal = 0 })
+
+    return { code = exit_args and exit_args.code, gone = not conn:is_ready() }
+  ]])
+
+  h.eq(result.code, 3)
   h.eq(result.gone, true)
 end
 

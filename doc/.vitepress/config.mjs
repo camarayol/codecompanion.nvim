@@ -225,6 +225,7 @@ export default withMermaid(
             { text: "Action Palette", link: "/configuration/action-palette" },
             { text: "Adapters - ACP", link: "/configuration/adapters-acp" },
             { text: "Adapters - HTTP", link: "/configuration/adapters-http" },
+            { text: "Adapters - RPC", link: "/configuration/adapters-rpc" },
             {
               text: "Chat Buffer",
               link: "/configuration/chat-buffer",

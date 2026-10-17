@@ -36,7 +36,7 @@ end
 ---Factory method to resolve adapters
 ---@param adapter string|table
 ---@param opts? table
----@return CodeCompanion.ACPAdapter|CodeCompanion.HTTPAdapter
+---@return CodeCompanion.ACPAdapter|CodeCompanion.HTTPAdapter|CodeCompanion.RPCAdapter
 function M.resolve(adapter, opts)
   if adapter_type(adapter) == "acp" then
     return require("codecompanion.adapters.acp").resolve(adapter, opts)
@@ -67,7 +67,7 @@ end
 ---Factory method to extend the adapter
 ---@param adapter string|table
 ---@param opts? table
----@return CodeCompanion.ACPAdapter|CodeCompanion.HTTPAdapter
+---@return CodeCompanion.ACPAdapter|CodeCompanion.HTTPAdapter|CodeCompanion.RPCAdapter
 function M.extend(adapter, opts)
   if adapter_type(adapter) == "acp" then
     return require("codecompanion.adapters.acp").extend(adapter, opts)
@@ -105,24 +105,30 @@ function M.set_model(args)
 end
 
 ---Get a handler function from an adapter with backwards compatibility
----@param adapter CodeCompanion.HTTPAdapter|CodeCompanion.ACPAdapter
+---@param adapter CodeCompanion.HTTPAdapter|CodeCompanion.ACPAdapter|CodeCompanion.RPCAdapter
 ---@param handler_name string
 ---@return function|nil
 function M.get_handler(adapter, handler_name)
   if adapter_type(adapter) == "acp" then
     return require("codecompanion.adapters.acp").get_handler(adapter, handler_name)
   end
+  if adapter_type(adapter) == "rpc" then
+    return require("codecompanion.adapters.rpc").get_handler(adapter, handler_name)
+  end
   return require("codecompanion.adapters.http").get_handler(adapter, handler_name)
 end
 
 ---Call a handler on an adapter with backwards compatibility
----@param adapter CodeCompanion.HTTPAdapter|CodeCompanion.ACPAdapter
+---@param adapter CodeCompanion.HTTPAdapter|CodeCompanion.ACPAdapter|CodeCompanion.RPCAdapter
 ---@param handler_name string
 ---@param args? table
 ---@return any|nil
 function M.call_handler(adapter, handler_name, args)
   if adapter_type(adapter) == "acp" then
     return require("codecompanion.adapters.acp").call_handler(adapter, handler_name, args)
+  end
+  if adapter_type(adapter) == "rpc" then
+    return require("codecompanion.adapters.rpc").call_handler(adapter, handler_name, args)
   end
   return require("codecompanion.adapters.http").call_handler(adapter, handler_name, args)
 end

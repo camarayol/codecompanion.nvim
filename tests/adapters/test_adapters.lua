@@ -699,6 +699,20 @@ T["ACP Adapter"]["can configure custom adapter with default model function"] = f
   h.eq(true, result.has_model_function)
 end
 
+T["RPC Adapter"] = new_set()
+
+T["RPC Adapter"]["call_handler passes an args table to the nested handler"] = function()
+  local result = child.lua([[
+    local adapters = require("codecompanion.adapters")
+    local adapter = adapters.resolve("pi")
+    return adapters.call_handler(adapter, "build_messages", {
+      messages = { { role = "user", content = "Hello", _meta = {} } },
+    })
+  ]])
+
+  h.eq({ message = "Hello" }, result)
+end
+
 --=============================================================================
 -- General Adapter Utils Tests
 --=============================================================================

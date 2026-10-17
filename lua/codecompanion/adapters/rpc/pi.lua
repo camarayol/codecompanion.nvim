@@ -23,22 +23,26 @@ return {
     timeout = 20000, -- 20 seconds
   },
   handlers = {
-    ---@param self CodeCompanion.RPCAdapter
-    ---@return boolean
-    setup = function(self)
-      return true
-    end,
+    lifecycle = {
+      ---@param self CodeCompanion.RPCAdapter
+      ---@return boolean
+      setup = function(self)
+        return true
+      end,
 
-    ---@param self CodeCompanion.RPCAdapter
-    ---@param messages table
-    ---@return { message: string, images?: table[] }
-    form_messages = function(self, messages)
-      return helpers.form_messages(self, messages)
-    end,
+      ---@param self CodeCompanion.RPCAdapter
+      ---@param args { code: number }
+      ---@return nil
+      on_exit = function(self, args) end,
+    },
 
-    ---@param self CodeCompanion.RPCAdapter
-    ---@param code number
-    ---@return nil
-    on_exit = function(self, code) end,
+    request = {
+      ---@param self CodeCompanion.RPCAdapter
+      ---@param args { messages: table }
+      ---@return { message: string, images?: table[] }
+      build_messages = function(self, args)
+        return helpers.build_messages(self, args)
+      end,
+    },
   },
 }

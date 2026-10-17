@@ -1,24 +1,10 @@
---[[
-===============================================================================
-    File:       codecompanion/rpc/init.lua
--------------------------------------------------------------------------------
-    Description:
-      This module implements RPC communication in CodeCompanion.
-      An RPC agent reads and writes newline-delimited JSON over stdin and
-      stdout. It's a lighter contract than ACP: there's no handshake, no session
-      listing and no permission round-trips. CodeCompanion sends commands and
-      reads back responses and events.
-
-      Ref: https://pi.dev/docs/latest/rpc
--------------------------------------------------------------------------------
---]]
-
 local adapter_utils = require("codecompanion.adapters.utils")
 local async = require("codecompanion.utils.async")
 local config = require("codecompanion.config")
 local integrations = require("codecompanion.integrations")
 local jsonrpc = require("codecompanion.utils.jsonrpc")
 local log = require("codecompanion.utils.log")
+local rpc_adapter = require("codecompanion.adapters.rpc")
 
 local TIMEOUTS = {
   DEFAULT = 2e4, -- 20 seconds
@@ -28,10 +14,6 @@ local TIMEOUTS = {
 
 local api = vim.api
 local uv = vim.uv
-
---=============================================================================
--- RPC Connection Class - Handles the connection to an RPC agent
---=============================================================================
 
 ---@class CodeCompanion.RPC.Connection
 ---@field adapter CodeCompanion.RPCAdapter
@@ -179,8 +161,8 @@ function Connection:start_agent_process()
   local adapter = self:prepare_adapter()
   self.adapter_modified = adapter
 
-  if adapter.handlers and adapter.handlers.setup then
-    if not adapter.handlers.setup(adapter) then
+  if rpc_adapter.get_handler(adapter, "setup") then
+    if not rpc_adapter.call_handler(adapter, "setup") then
       log:error("[rpc::start_agent_process] Adapter setup failed")
       return false
     end
@@ -696,8 +678,8 @@ function Connection:handle_process_exit(code, signal, process_token)
 
   log:debug("[rpc] Process exited (code=%s, signal=%s)", code, signal)
 
-  if self.adapter_modified and self.adapter_modified.handlers and self.adapter_modified.handlers.on_exit then
-    self.adapter_modified.handlers.on_exit(self.adapter_modified, code)
+  if self.adapter_modified then
+    rpc_adapter.call_handler(self.adapter_modified, "on_exit", { code = code })
   end
 
   -- Fire any pending async callbacks so coroutines don't hang
@@ -728,6 +710,7 @@ function Connection:handle_process_exit(code, signal, process_token)
     self._deadlines[id] = nil
   end
 
+  self.adapter_modified = nil
   self:_clear_exit_autocmd()
 end
 

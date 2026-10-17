@@ -69,9 +69,11 @@ return {
         defaults = { timeout = 1000 },
         opts = { session_flag = "--session" },
         handlers = {
-          form_messages = function(_, messages)
-            return { message = "test" }
-          end,
+          request = {
+            build_messages = function()
+              return { message = "test" }
+            end,
+          },
         },
       },
     },

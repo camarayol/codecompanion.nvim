@@ -1,3 +1,4 @@
+local adapters = require("codecompanion.adapters")
 local async = require("codecompanion.utils.async")
 local config = require("codecompanion.config")
 local formatter = require("codecompanion.interactions.chat.rpc.formatters")
@@ -135,7 +136,12 @@ function RPCHandler:create_and_send_prompt(payload)
     self:process_event(event)
   end)
 
-  local formatted = self.chat.adapter.handlers.form_messages(self.chat.adapter, payload.messages)
+  local formatted = adapters.call_handler(self.chat.adapter, "build_messages", { messages = payload.messages })
+  if not formatted then
+    return self:handle_error(
+      ("The `%s` adapter has no `handlers.request.build_messages` handler"):format(self.chat.adapter.name)
+    )
+  end
 
   local models = conn:get_models()
   self._event_data = {
@@ -317,13 +323,14 @@ function RPCHandler:process_tool_event(event, status)
   -- If the tool has already written to the chat buffer, update the existing line
   local cached = id and self.ui_state[id]
   if cached then
-    local ok, _, new_icon_id = pcall(
-      self.chat.update_buf_line,
-      self.chat,
-      cached.line_number,
-      content,
-      { status = status, icon_id = cached.icon_id, priority = 120, virt_text_pos = "inline" }
-    )
+    local ok, _, new_icon_id = pcall(self.chat.update_buf_line, self.chat, {
+      line_number = cached.line_number,
+      content = content,
+      status = status,
+      icon_id = cached.icon_id,
+      priority = 120,
+      virt_text_pos = "inline",
+    })
 
     if ok then
       if finished then
@@ -333,6 +340,11 @@ function RPCHandler:process_tool_event(event, status)
       end
       return
     end
+
+    if finished then
+      self.ui_state[id] = nil
+    end
+    log:debug("[RPC::Handler] Failed to update tool call line for toolCallId %s", id)
   end
 
   local line_number, icon_id = self.chat:add_buf_message({
@@ -416,7 +428,12 @@ function RPCHandler:handle_complete(aborted)
   end
 
   -- An aborted run follows the stop path, so orphaned tool calls are cleaned up
-  self.chat:done(self.output, self.reasoning, {}, nil, aborted and { status = "stopped" } or nil)
+  self.chat:done({
+    output = self.output,
+    reasoning = self.reasoning,
+    tools = {},
+    status = aborted and "stopped" or nil,
+  })
 end
 
 ---Handle errors
@@ -438,7 +455,7 @@ function RPCHandler:handle_error(error)
     { type = self.chat.MESSAGE_TYPES.LLM_MESSAGE }
   )
 
-  self.chat:done(self.output, nil, nil, nil, { error = error })
+  self.chat:done({ output = self.output, error = error })
 end
 
 ---Fire the completion event for this request

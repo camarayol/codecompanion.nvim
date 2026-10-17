@@ -1,14 +1,3 @@
---[[
-===============================================================================
-    File:       codecompanion/interactions/chat/rpc/history.lua
--------------------------------------------------------------------------------
-    Description:
-      Renders the conversation an agent keeps on its own side into the chat
-      buffer, after /resume has switched to one of its sessions. The agent holds
-      the restored context, so this is display only.
--------------------------------------------------------------------------------
---]]
-
 local config = require("codecompanion.config")
 local formatter = require("codecompanion.interactions.chat.rpc.formatters")
 

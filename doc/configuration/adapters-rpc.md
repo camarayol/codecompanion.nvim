@@ -131,13 +131,17 @@ require("codecompanion").setup({
             session_flag = "--session",
           },
           handlers = {
-            setup = function(self)
-              return true
-            end,
-            form_messages = function(self, messages)
-              return helpers.form_messages(self, messages)
-            end,
-            on_exit = function(self, code) end,
+            lifecycle = {
+              setup = function(self)
+                return true
+              end,
+              on_exit = function(self, args) end,
+            },
+            request = {
+              build_messages = function(self, args)
+                return helpers.build_messages(self, args)
+              end,
+            },
           },
         }
       end,
@@ -147,7 +151,7 @@ require("codecompanion").setup({
 ````
 
 > [!NOTE]
-> `form_messages` returns a `{ message, images? }` table rather than a list of messages. The agent keeps its own conversation state, so CodeCompanion only sends the messages the agent hasn't seen yet.
+> `build_messages` returns a `{ message, images? }` table rather than a list of messages. The agent keeps its own conversation state, so CodeCompanion only sends the messages the agent hasn't seen yet.
 
 ## Limitations
 
