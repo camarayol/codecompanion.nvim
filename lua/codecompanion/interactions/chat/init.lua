@@ -144,6 +144,9 @@ local function create_chat_buf()
     vim.bo[bufnr].omnifunc = "v:lua.require'codecompanion.providers.completion.default.omnifunc'.omnifunc"
   end
 
+  -- The chat view is written programmatically, so none of it should be undoable
+  vim.bo[bufnr].undolevels = -1
+
   return bufnr
 end
 
@@ -721,6 +724,9 @@ function Chat.new(args)
   if args.auto_submit then
     self:submit()
   end
+
+  -- Re-enable undo now that the view has been built
+  vim.bo[self.bufnr].undolevels = vim.go.undolevels
 
   return self ---@type CodeCompanion.Chat
 end

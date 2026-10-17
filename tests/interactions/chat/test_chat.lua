@@ -30,6 +30,36 @@ T["Chat"]["system prompt is added first"] = function()
   h.eq("default system prompt", messages[1].content)
 end
 
+T["Chat"]["DOES NOT undo the content the chat was created with"] = function()
+  local unchanged = child.lua([[
+    local bufnr = _G.chat.bufnr
+    local before = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+
+    vim.api.nvim_buf_call(bufnr, function()
+      vim.cmd("silent! normal! u")
+    end)
+
+    return vim.deep_equal(before, vim.api.nvim_buf_get_lines(bufnr, 0, -1, false))
+  ]])
+
+  h.eq(true, unchanged)
+end
+
+T["Chat"]["undoes an edit made after the chat was created"] = function()
+  local removed = child.lua([[
+    local bufnr = _G.chat.bufnr
+    vim.api.nvim_buf_set_lines(bufnr, -1, -1, false, { "a line I typed" })
+
+    vim.api.nvim_buf_call(bufnr, function()
+      vim.cmd("silent! normal! u")
+    end)
+
+    return not vim.tbl_contains(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "a line I typed")
+  ]])
+
+  h.eq(true, removed)
+end
+
 T["Chat"]["buffer editor context is handled"] = function()
   -- Execute all the complex operations in the child process
   child.lua([[
