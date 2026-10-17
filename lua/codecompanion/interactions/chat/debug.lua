@@ -155,6 +155,35 @@ function Debug:render()
           )
         end
       end
+    elseif adapter.type == "rpc" and self.chat.rpc_connection then
+      local rpc_models = self.chat.rpc_connection:get_models()
+      local available_models = rpc_models and rpc_models.availableModels or {}
+
+      if #available_models > 0 then
+        local function get_model_name(model)
+          return model.name or model.id or model.modelId
+        end
+
+        local available = vim.tbl_map(get_model_name, available_models)
+        table.sort(available)
+
+        local current_name = rpc_models.currentModelId
+        for _, model in ipairs(available_models) do
+          if (model.id or model.modelId) == rpc_models.currentModelId then
+            current_name = get_model_name(model)
+            break
+          end
+        end
+
+        table.insert(
+          lines,
+          "--   Model: "
+            .. string.format("%q", current_name or "unknown")
+            .. " (Available: "
+            .. table.concat(available, ", ")
+            .. ")"
+        )
+      end
     end
   end
 
