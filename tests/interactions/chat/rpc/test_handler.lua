@@ -41,12 +41,16 @@ T["RPC Handler"] = new_set({
             messages = {},
             status = "",
             rpc_connection = conn,
-            MESSAGE_TYPES = { LLM_MESSAGE = "llm_message" },
+            MESSAGE_TYPES = { LLM_MESSAGE = "llm_message", USER_MESSAGE = "user_message" },
             buffer_messages = {},
             completed = {},
             update_metadata = function() end,
             set_title = function() end,
           }
+
+          function chat:_set_pending_steers(steering)
+            self.pending_steers = steering
+          end
 
           function chat:add_buf_message(data, message_opts)
             table.insert(self.buffer_messages, { content = data.content, type = message_opts and message_opts.type })
@@ -255,6 +259,64 @@ T["RPC Handler"]["message_end"]["DOES NOT repeat text the deltas already streame
 
   h.eq(result.chunks, 1)
   h.eq(result.output, "hello there")
+end
+
+T["RPC Handler"]["queue_update()"] = new_set()
+
+T["RPC Handler"]["queue_update()"]["shows a steer as pending while it is queued"] = function()
+  local result = child.lua([[
+    local handler = require("codecompanion.interactions.chat.rpc.handler").new(fake_chat())
+    local chat = handler.chat
+
+    handler:submit({ messages = {} })
+    handler:process_event({ type = "queue_update", steering = { "Take the other path" }, followUp = {} })
+
+    return { pending = chat.pending_steers, promoted = #chat.buffer_messages }
+  ]])
+
+  h.eq(result.pending, { "Take the other path" })
+  h.eq(result.promoted, 0)
+end
+
+T["RPC Handler"]["queue_update()"]["turns a delivered steer into a user message"] = function()
+  local result = child.lua([[
+    local handler = require("codecompanion.interactions.chat.rpc.handler").new(fake_chat())
+    local chat = handler.chat
+
+    handler:submit({ messages = {} })
+    handler:process_event({ type = "queue_update", steering = { "Take the other path" }, followUp = {} })
+    handler:process_event({ type = "queue_update", steering = {}, followUp = {} })
+
+    return {
+      pending = chat.pending_steers,
+      message = chat.buffer_messages[1] and chat.buffer_messages[1].content,
+      type = chat.buffer_messages[1] and chat.buffer_messages[1].type,
+    }
+  ]])
+
+  h.eq(result.pending, {})
+  h.eq(result.message, "Take the other path")
+  h.eq(result.type, "user_message")
+end
+
+T["RPC Handler"]["queue_update()"]["promotes one steer at a time"] = function()
+  -- one-at-a-time is pi's default, so a turn boundary drains a single entry
+  local result = child.lua([[
+    local handler = require("codecompanion.interactions.chat.rpc.handler").new(fake_chat())
+    local chat = handler.chat
+
+    handler:submit({ messages = {} })
+    handler:process_event({ type = "queue_update", steering = { "first", "second" }, followUp = {} })
+    handler:process_event({ type = "queue_update", steering = { "second" }, followUp = {} })
+
+    return {
+      pending = chat.pending_steers,
+      promoted = vim.tbl_map(function(message) return message.content end, chat.buffer_messages),
+    }
+  ]])
+
+  h.eq(result.pending, { "second" })
+  h.eq(result.promoted, { "first" })
 end
 
 T["RPC Handler"]["agent_settled"] = new_set()

@@ -562,6 +562,21 @@ function UI:set_virtual_text(message, method, range)
   })
 end
 
+---Set virtual lines below the last line in the chat buffer
+---@param message string
+---@return number The id of the extmark
+function UI:set_virtual_lines(message)
+  local range = { api.nvim_buf_line_count(self.chat_bufnr) - 1, 0 }
+
+  local virt_lines = vim.tbl_map(function(line)
+    return { { line, "CodeCompanionVirtualText" } }
+  end, vim.split(message, "\n", { trimempty = true }))
+
+  return api.nvim_buf_set_extmark(self.chat_bufnr, CONSTANTS.NS_VIRTUAL_TEXT, range[1], range[2], {
+    virt_lines = virt_lines,
+  })
+end
+
 ---Clear virtual text in the chat buffer
 ---@param extmark_id number The id of the extmark to delete
 ---@return nil

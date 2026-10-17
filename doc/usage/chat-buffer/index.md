@@ -169,7 +169,7 @@ Press `?` in a chat buffer to list every keymap. The defaults in normal mode are
 | `gc` | `codeblock` | Insert an empty codeblock |
 | `gd` | `debug` | Open the debug window |
 | `gf` | `fold_code` | Fold all codeblocks |
-| `gm` | `_btw` | Send a follow-up while the LLM is running |
+| `gm` | `_btw` `_steer` | Send a follow-up while the LLM is running, or steer a running RPC agent |
 | `gM` | `rules` | Remove rules from the chat |
 | `gr` | `regenerate` | Regenerate the last response |
 | `gR` | `goto_file_under_cursor` | Open the file path under the cursor |

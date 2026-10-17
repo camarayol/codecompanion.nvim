@@ -741,6 +741,47 @@ M.btw = {
   end,
 }
 
+M.steer = {
+  callback = function(chat)
+    if chat.adapter.type ~= "rpc" then
+      return
+    end
+    vim.ui.input({ prompt = "Steer the agent ... " }, function(input)
+      if input and input ~= "" then
+        chat:steer(input)
+      end
+    end)
+  end,
+
+  ---@param chat CodeCompanion.Chat
+  set = function(chat)
+    local steer_keymap = config.interactions.chat.keymaps._steer
+    if not steer_keymap then
+      return
+    end
+
+    local key = steer_keymap.modes.n
+    if key then
+      vim.keymap.set("n", key, function()
+        M.steer.callback(chat)
+      end, { buffer = chat.bufnr, desc = steer_keymap.description, nowait = true })
+    end
+  end,
+
+  ---@param chat CodeCompanion.Chat
+  remove = function(chat)
+    local steer_keymap = config.interactions.chat.keymaps._steer
+    if not steer_keymap then
+      return
+    end
+
+    local key = steer_keymap.modes.n
+    if key then
+      pcall(vim.keymap.del, "n", key, { buffer = chat.bufnr })
+    end
+  end,
+}
+
 M.copilot_stats = {
   desc = "Show Copilot usage statistics",
   callback = function(chat)

@@ -8,6 +8,28 @@ local watch = require("codecompanion.interactions.shared.watch")
 
 local FILE_TOOLS = { edit = true, write = true }
 
+---The steering messages that have left the queue, ie. been delivered
+---@param previous string[]
+---@param current string[]
+---@return string[]
+local function delivered_steers(previous, current)
+  local remaining = {}
+  for _, text in ipairs(current) do
+    remaining[text] = (remaining[text] or 0) + 1
+  end
+
+  local delivered = {}
+  for _, text in ipairs(previous) do
+    if (remaining[text] or 0) > 0 then
+      remaining[text] = remaining[text] - 1
+    else
+      table.insert(delivered, text)
+    end
+  end
+
+  return delivered
+end
+
 ---@class CodeCompanion.Chat.RPCHandler
 ---@field chat CodeCompanion.Chat
 ---@field output table Standard output message from the agent
@@ -19,6 +41,7 @@ local FILE_TOOLS = { edit = true, write = true }
 ---@field _streaming_started boolean
 ---@field _text_streamed boolean
 ---@field _thought_streamed boolean
+---@field _steering string[] The agent's pending steering messages, last seen
 local RPCHandler = {}
 
 ---@param chat CodeCompanion.Chat
@@ -34,6 +57,7 @@ function RPCHandler.new(chat)
     _streaming_started = false,
     _text_streamed = false,
     _thought_streamed = false,
+    _steering = {},
   }, { __index = RPCHandler })
 
   return self --[[@type CodeCompanion.Chat.RPCHandler]]
@@ -193,6 +217,8 @@ function RPCHandler:process_event(event)
     self:process_tool_event(event, event.isError and "failed" or "completed")
   elseif event.type == "agent_settled" then
     self:handle_complete(event.aborted == true)
+  elseif event.type == "queue_update" then
+    self:handle_queue_update(event)
   elseif event.type == "session_info_changed" then
     if type(event.name) == "string" and event.name ~= "" then
       self.chat:set_title(event.name)
@@ -208,6 +234,26 @@ function RPCHandler:process_event(event)
       self:handle_complete(false)
     end
   end
+
+  -- Content added by an event can push the pending marker off the buffer end,
+  -- so the queue is redrawn here on every event
+  self.chat:_set_pending_steers(self._steering)
+end
+
+---Turn the agent's steering queue into buffer state, promoting what has been
+---delivered to a user message
+---@param event table
+---@return nil
+function RPCHandler:handle_queue_update(event)
+  local steering = type(event.steering) == "table" and event.steering or {}
+
+  for _, text in ipairs(delivered_steers(self._steering, steering)) do
+    self.chat:add_buf_message({ role = config.constants.USER_ROLE, content = text }, {
+      type = self.chat.MESSAGE_TYPES.USER_MESSAGE,
+    })
+  end
+
+  self._steering = vim.deepcopy(steering)
 end
 
 ---Fire the streaming event once, on the first sign of output
@@ -463,6 +509,9 @@ end
 ---@param error? string
 ---@return nil
 function RPCHandler:_finish(status, error)
+  self._steering = {}
+  self.chat:_set_pending_steers({})
+
   if not self._event_data then
     return
   end

@@ -42,6 +42,7 @@
 ---@field _compacting? boolean Whether a compaction request is currently in flight
 ---@field _last_role string The last role that was rendered in the chat buffer
 ---@field _status table Bookkeeping for the current status virtual text (extmark id + status flag)
+---@field _steering_extmark? number The extmark showing the agent's pending steering messages
 ---@field _tool_monitors? table A table of tool monitors that are currently running in the chat buffer
 
 ---@class CodeCompanion.ChatArgs Arguments that can be injected into the chat
@@ -1245,6 +1246,42 @@ function Chat:btw(content)
   log:debug("BTW message queued: %s", content)
 end
 
+---Send a steering message to the running RPC agent
+---@param message string
+---@return nil
+function Chat:steer(message)
+  if not message or message == "" then
+    return
+  end
+
+  local connection = self.rpc_connection
+  if not connection then
+    return
+  end
+
+  connection:steer(message)
+end
+
+---Show the agent's pending steering messages at the end of the buffer
+---@param steering string[]
+---@return nil
+function Chat:_set_pending_steers(steering)
+  if self._steering_extmark and api.nvim_buf_is_valid(self.bufnr) then
+    self.ui:clear_virtual_text(self._steering_extmark)
+  end
+  self._steering_extmark = nil
+
+  if not steering or #steering == 0 or not api.nvim_buf_is_valid(self.bufnr) then
+    return
+  end
+
+  local lines = vim.tbl_map(function(text)
+    return "Steering: " .. text
+  end, steering)
+
+  self._steering_extmark = self.ui:set_virtual_lines(table.concat(lines, "\n"))
+end
+
 ---Inject a btw message into the message stack
 ---@return nil
 function Chat:_inject_btw()
@@ -1494,8 +1531,13 @@ function Chat:submit(opts)
     self.ui:lock_buf()
     self.header_line = api.nvim_buf_line_count(self.bufnr) + 2 -- this accounts for the LLM header
 
-    -- Allow users to send a btw message during an active request
-    require("codecompanion.interactions.chat.keymaps").btw.set(self)
+    -- An RPC agent is steered mid-turn; an HTTP chat carries a btw message
+    local chat_keymaps = require("codecompanion.interactions.chat.keymaps")
+    if self.adapter.type == "rpc" then
+      chat_keymaps.steer.set(self)
+    else
+      chat_keymaps.btw.set(self)
+    end
   end
 
   self:checkpoint()
@@ -2025,7 +2067,9 @@ function Chat:ready_for_input(opts)
     self.ui:add_line_break()
     self.ui:add_line_break()
   else
-    require("codecompanion.interactions.chat.keymaps").btw.remove(self)
+    local chat_keymaps = require("codecompanion.interactions.chat.keymaps")
+    chat_keymaps.btw.remove(self)
+    chat_keymaps.steer.remove(self)
   end
 
   log:info("Chat request finished")
@@ -2042,7 +2086,9 @@ end
 ---Restore the chat buffer to an editable state (used when a submission is prevented)
 ---@return nil
 function Chat:restore()
-  require("codecompanion.interactions.chat.keymaps").btw.remove(self)
+  local chat_keymaps = require("codecompanion.interactions.chat.keymaps")
+  chat_keymaps.btw.remove(self)
+  chat_keymaps.steer.remove(self)
   self:reset()
   utils.fire("ChatRestored", { bufnr = self.bufnr, id = self.id })
 end

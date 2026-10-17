@@ -88,6 +88,22 @@ T["RPC Connection"]["abort()"]["writes the command with no wait registered"] = f
   h.eq(result.json, '{"type":"abort"}\n')
 end
 
+T["RPC Connection"]["steer()"] = new_set()
+
+T["RPC Connection"]["steer()"]["writes the message with no wait registered"] = function()
+  local result = child.lua([[
+    rpc_conn()
+    stdin_writes = {}
+    local ok = conn:steer("Take the other path")
+
+    return { wrote = ok, message = vim.json.decode(stdin_writes[1]), armed = vim.tbl_count(conn._deadlines) }
+  ]])
+
+  h.eq(result.wrote, true)
+  h.eq(result.message, { type = "steer", message = "Take the other path" })
+  h.eq(result.armed, 0)
+end
+
 T["RPC Connection"]["send_command()"] = new_set()
 
 T["RPC Connection"]["send_command()"]["resolves an async wait on a string response ID"] = function()

@@ -3591,8 +3591,10 @@ are:
 
   gf                      fold_code                Fold all codeblocks
 
-  gm                      _btw                     Send a follow-up while
-                                                   the LLM is running
+  gm                      _btw _steer              Send a follow-up while
+                                                   the LLM is running, or
+                                                   steer a running RPC
+                                                   agent
 
   gM                      rules                    Remove rules from the
                                                    chat

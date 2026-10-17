@@ -801,6 +801,12 @@ If you are providing code changes, use the edit_file tool (if available to you) 
           callback = "keymaps.btw",
           description = "Send a follow-up while streaming",
         },
+        -- Note: This is only available during streaming with an RPC adapter
+        _steer = {
+          modes = { n = "gm" },
+          callback = "keymaps.steer",
+          description = "Steer the running agent",
+        },
       },
       sessions = {
         enabled = true, -- Allow chats to be saved to, and restored from, disk?

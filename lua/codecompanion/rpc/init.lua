@@ -430,6 +430,18 @@ function Connection:abort()
   return self:write_message(self.methods.encode({ type = "abort" }) .. "\n")
 end
 
+---Queue a steering message for the agent's running turn
+---The agent answers without a request ID to correlate against, so the caller
+---does not wait on it
+---@param message string
+---@return boolean
+function Connection:steer(message)
+  if not message or message == "" then
+    return false
+  end
+  return self:write_message(self.methods.encode({ type = "steer", message = message }) .. "\n")
+end
+
 ---Switch the agent to a previous session and refresh our view of its state
 ---An extension may veto the switch, which reports as cancelled on a success
 ---@param session_path string
