@@ -167,7 +167,7 @@ function SlashCommand:execute()
   end
 
   if Chat.adapter.type == "rpc" then
-    if Chat.cycle > 1 then
+    if Chat.submitted then
       return utils.notify("The /resume command must be called before submitting any messages", vim.log.levels.WARN)
     end
 
@@ -184,7 +184,7 @@ function SlashCommand:execute()
     })
   end
 
-  if Chat.cycle > 1 then
+  if Chat.submitted then
     return utils.notify("The /resume command must be called before submitting any messages", vim.log.levels.WARN)
   end
 

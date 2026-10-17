@@ -27,6 +27,7 @@
 ---@field parsers { markdown: vim.treesitter.LanguageTree, markdown_inline?: vim.treesitter.LanguageTree, yaml?: vim.treesitter.LanguageTree } Tree-sitter parsers attached to the chat buffer
 ---@field session_id string An identifier for the life of the chat buffer (designed for external use)
 ---@field settings? table The settings that are used in the adapter of the chat buffer
+---@field submitted boolean Whether a request has been submitted from this chat
 ---@field subscribers table The subscribers to the chat buffer
 ---@field title? string The title of the chat buffer
 ---@field tokens? number|table The tokens reported by the adapter
@@ -621,6 +622,7 @@ function Chat.new(args)
     opts = args,
     session_id = fmt("codecompanion-%d-%d", os.time(), id),
     status = "",
+    submitted = false,
     title = args.title,
     _last_role = args.last_role or config.constants.USER_ROLE,
     _status = {},
@@ -1512,6 +1514,7 @@ function Chat:submit(opts)
   log:trace("Tools:\n%s", payload.tools)
   log:info("Chat request started")
 
+  self.submitted = true
   self:dispatch("on_submitted", { payload = payload })
 
   if self.adapter.type == "http" then
@@ -2066,6 +2069,7 @@ function Chat:clear()
   self.header_line = 1
   self.messages = {}
   self.context_items = {}
+  self.submitted = false
 
   self.watchers:clear()
   self.tool_registry:clear()
