@@ -37,6 +37,12 @@ local TIMEOUTS = {
 local api = vim.api
 local uv = vim.uv
 
+---Whether the log level is verbose enough to capture the raw protocol traffic
+---@return boolean
+local function should_capture_traffic()
+  return vim.tbl_contains({ "TRACE", "DEBUG" }, config.opts.log_level)
+end
+
 --=============================================================================
 -- ACP Connection Class - Handles the connection to ACP agents
 --=============================================================================
@@ -501,8 +507,10 @@ function Connection:start_agent_process()
 
   self._state.line_buffer:reset()
 
-  self._rpc_log = log.new_response_file()
-  log:info("[acp] RPC log: %s", self._rpc_log.path)
+  if should_capture_traffic() then
+    self._rpc_log = log.new_response_file()
+    log:info("[acp] RPC log: %s", self._rpc_log.path)
+  end
 
   local ok, sysobj = pcall(
     self.methods.job,
