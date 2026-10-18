@@ -713,6 +713,56 @@ T["RPC Adapter"]["call_handler passes an args table to the nested handler"] = fu
   h.eq({ message = "Hello" }, result)
 end
 
+T["RPC Adapter"]["carries the model from opts into defaults"] = function()
+  local result = child.lua([[
+    require("codecompanion").setup({
+      adapters = { rpc = {
+        test_rpc = {
+          name = "test_rpc",
+          type = "rpc",
+          commands = { default = { "pi", "--mode", "rpc" } },
+          roles = { llm = "assistant", user = "user" },
+          defaults = { timeout = 1000 },
+        },
+      } },
+    })
+
+    local adapter = require("codecompanion.adapters").resolve("test_rpc", { model = "claude-sonnet-4" })
+    return {
+      name = adapter.name,
+      type = adapter.type,
+      model = adapter.defaults.model,
+      timeout = adapter.defaults.timeout,
+    }
+  ]])
+
+  h.eq("test_rpc", result.name)
+  h.eq("rpc", result.type)
+  h.eq("claude-sonnet-4", result.model)
+  h.eq(1000, result.timeout)
+end
+
+T["RPC Adapter"]["carries the model from a { name, model } table into defaults"] = function()
+  local result = child.lua([[
+    require("codecompanion").setup({
+      adapters = { rpc = {
+        test_rpc = {
+          name = "test_rpc",
+          type = "rpc",
+          commands = { default = { "pi", "--mode", "rpc" } },
+          roles = { llm = "assistant", user = "user" },
+        },
+      } },
+    })
+
+    local adapter = require("codecompanion.adapters").resolve({ name = "test_rpc", model = "haiku" })
+    return { name = adapter.name, model = adapter.defaults.model }
+  ]])
+
+  h.eq("test_rpc", result.name)
+  h.eq("haiku", result.model)
+end
+
 --=============================================================================
 -- General Adapter Utils Tests
 --=============================================================================

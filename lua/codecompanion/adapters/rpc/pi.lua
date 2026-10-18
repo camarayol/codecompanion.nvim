@@ -12,6 +12,7 @@ return {
     user = "user",
   },
   opts = {
+    session_stats = true,
     vision = true,
     resume_sessions = true,
     session_flag = "--session",

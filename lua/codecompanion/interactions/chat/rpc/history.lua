@@ -3,27 +3,6 @@ local formatter = require("codecompanion.interactions.chat.rpc.formatters")
 
 local M = {}
 
----Pull the first piece of text out of an agent message's content
----@param content table|string|nil
----@return string
-local function extract_text(content)
-  if type(content) == "string" then
-    return content
-  end
-  if type(content) ~= "table" then
-    return ""
-  end
-
-  local text = {}
-  for _, block in ipairs(content) do
-    if block.type == "text" and type(block.text) == "string" then
-      table.insert(text, block.text)
-    end
-  end
-
-  return table.concat(text)
-end
-
 ---Index the tool results by the call they belong to, so each call can show its output
 ---@param messages table The agent's messages from get_messages
 ---@return table<string, table>
@@ -96,7 +75,7 @@ function M.restore(chat, messages)
   for _, message in ipairs(messages) do
     if message.role == "user" then
       flush_llm()
-      local text = extract_text(message.content)
+      local text = formatter.message_text(message.content)
       if text ~= "" then
         table.insert(user_chunks, text)
       end
@@ -114,7 +93,7 @@ function M.restore(chat, messages)
           end
         end
       else
-        local text = extract_text(message.content)
+        local text = formatter.message_text(message.content)
         if text ~= "" then
           table.insert(llm_chunks, text)
         end
@@ -124,8 +103,7 @@ function M.restore(chat, messages)
   flush_user()
   flush_llm()
 
-  -- ready_for_input skips the prompt area when the last message was from the
-  -- user, which would leave the parser range sitting over the restored history
+  -- ready_for_input skips the prompt area after a user message, so close on an LLM one
   if chat._last_role == config.constants.USER_ROLE then
     chat.cycle = chat.cycle + 1
     chat:add_buf_message({ role = config.constants.USER_ROLE, content = "" })

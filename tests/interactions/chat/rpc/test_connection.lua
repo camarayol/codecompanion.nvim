@@ -211,6 +211,103 @@ T["RPC Connection"]["send_command()"]["fires the deadline when the agent never r
   h.eq(result.no_pending, true)
 end
 
+T["RPC Connection"]["send_command()"]["keeps the response cache bounded"] = function()
+  local result = child.lua([[
+    rpc_conn()
+
+    -- A response no caller ever collects, e.g. one that arrived after its deadline
+    for id = 1, 40 do
+      stdout_fn(nil, ('{"type":"response","id":"%d","success":true}\n'):format(id))
+    end
+
+    return {
+      stored = vim.tbl_count(conn.pending_responses),
+      oldest = conn.pending_responses["1"] ~= nil,
+      newest = conn.pending_responses["40"] ~= nil,
+    }
+  ]])
+
+  h.eq(result.stored, 32)
+  h.eq(result.oldest, false)
+  h.eq(result.newest, true)
+end
+
+T["RPC Connection"]["refresh_session_stats()"] = new_set()
+
+T["RPC Connection"]["refresh_session_stats()"]["DOES NOT ask an agent that reports no statistics"] = function()
+  local result = child.lua([[
+    rpc_conn()
+    stdin_writes = {}
+
+    conn:refresh_session_stats()
+
+    return { writes = #stdin_writes, cached = conn:get_session_stats() == nil }
+  ]])
+
+  h.eq(result.writes, 0)
+  h.eq(result.cached, true)
+end
+
+T["RPC Connection"]["refresh_session_stats()"]["asks an agent that reports statistics"] = function()
+  local result = child.lua([[
+    local async = require("codecompanion.utils.async")
+
+    rpc_conn()
+    conn.adapter.opts.session_stats = true
+    stdin_writes = {}
+
+    async.sync(function()
+      conn:refresh_session_stats()
+    end)()
+
+    local sent = vim.json.decode(stdin_writes[1])
+    stdout_fn(nil, '{"type":"response","id":"' .. sent.id .. '","success":true,"data":{"tokens":{"total":42}}}\n')
+
+    local stats = conn:get_session_stats()
+
+    return { command = sent.type, cached = stats and stats.tokens.total }
+  ]])
+
+  h.eq(result.command, "get_session_stats")
+  h.eq(result.cached, 42)
+end
+
+T["RPC Connection"]["ensure_session()"] = new_set()
+
+T["RPC Connection"]["ensure_session()"]["switches to the model the adapter was configured with"] = function()
+  local result = child.lua([[
+    local async = require("codecompanion.utils.async")
+
+    local connection = rpc_conn()
+    connection.adapter_modified.defaults.model = "claude-sonnet-4"
+
+    local established = false
+    async.sync(function()
+      established = connection:ensure_session()
+    end)()
+
+    stdout_fn(nil, '{"id":"1","type":"response","command":"get_state","success":true,"data":{"sessionId":"abc","sessionFile":"/tmp/s.jsonl","model":{"id":"gpt-5-mini"}}}\n')
+    stdout_fn(nil, '{"id":"2","type":"response","command":"get_available_models","success":true,"data":{"models":[{"id":"claude-sonnet-4","provider":"anthropic"}]}}\n')
+
+    local set_model = vim.json.decode(stdin_writes[#stdin_writes])
+    stdout_fn(nil, '{"id":"3","type":"response","command":"set_model","success":true,"data":{"id":"claude-sonnet-4","provider":"anthropic"}}\n')
+
+    return {
+      established = established,
+      command = set_model.type,
+      provider = set_model.provider,
+      model_id = set_model.modelId,
+      current_model = connection._current_model_id,
+    }
+  ]])
+
+  h.eq(result.established, true)
+  h.eq(result.command, "set_model")
+  h.eq(result.provider, "anthropic")
+  h.eq(result.model_id, "claude-sonnet-4")
+  h.eq(result.current_model, "claude-sonnet-4")
+end
+
 T["RPC Connection"]["start_agent_process()"] = new_set()
 
 T["RPC Connection"]["start_agent_process()"]["does not start the agent when the setup handler fails"] = function()
@@ -251,6 +348,33 @@ T["RPC Connection"]["process exit"]["releases pending waits and clears deadlines
   h.eq(result.deadline_released, true)
   h.eq(result.no_pending, true)
   h.eq(result.gone, true)
+end
+
+T["RPC Connection"]["process exit"]["clears the connection before the event fires"] = function()
+  local result = child.lua([[
+    local connection = rpc_conn()
+
+    local seen = {}
+    connection:set_event_handler(function(event)
+      if event.type ~= "_process_exit" then
+        return
+      end
+      seen.ready = connection:is_ready()
+      seen.handle = connection._state.handle ~= nil
+      seen.prompt_sent = connection:prompt({ message = "again" }) ~= nil
+    end)
+
+    stdin_writes = {}
+    exit_fn({ code = 1, signal = 0 })
+
+    seen.writes = #stdin_writes
+    return seen
+  ]])
+
+  h.eq(result.ready, false)
+  h.eq(result.handle, false)
+  h.eq(result.prompt_sent, false)
+  h.eq(result.writes, 0)
 end
 
 T["RPC Connection"]["process exit"]["marks a signalled death with a nil exit code"] = function()
@@ -376,6 +500,28 @@ T["RPC Connection"]["disconnect()"]["marks the connection not ready and drops it
 
   h.eq(result.ready, false)
   h.eq(result.autocmd_cleared, true)
+end
+
+T["RPC Connection"]["disconnect()"]["stops later commands writing to the closing process"] = function()
+  local result = child.lua([[
+    local connection = rpc_conn()
+    connection:disconnect()
+    stdin_writes = {}
+
+    return {
+      prompt_sent = connection:prompt({ message = "hi" }) ~= nil,
+      aborted = connection:abort(),
+      steer_sent = connection:steer("go left"),
+      ready = connection:is_ready(),
+      writes = #stdin_writes,
+    }
+  ]])
+
+  h.eq(result.prompt_sent, false)
+  h.eq(result.aborted, false)
+  h.eq(result.steer_sent, false)
+  h.eq(result.ready, false)
+  h.eq(result.writes, 0)
 end
 
 T["RPC Connection"]["disconnect()"]["does not accumulate VimLeavePre hooks across reconnects"] = function()

@@ -80,7 +80,7 @@ function RPCHandler:submit(payload)
     end
   end
 
-  -- IMPORTANT: Registered before the connect below, so a second <CR> can't start a parallel submit
+  -- NOTE: Registered before the connect below, so a second <CR> can't start a parallel submit
   self.chat.current_request = request
 
   -- Keep the agent's request off the main loop
@@ -183,9 +183,15 @@ function RPCHandler:create_and_send_prompt(payload)
 
   local response = conn:prompt(formatted)
 
-  if not response or not response.success then
-    local error_message = (response and response.error) or "The agent rejected the prompt"
-    self:handle_error(error_message)
+  if not response then
+    -- The agent may still be running the prompt, so stop it rather than leave it burning tokens
+    conn:abort()
+    self:handle_error("The agent did not answer the prompt")
+    return nil
+  end
+
+  if not response.success then
+    self:handle_error(response.error or "The agent rejected the prompt")
     return nil
   end
 
@@ -224,8 +230,7 @@ function RPCHandler:process_event(event)
       self.chat:set_title(event.name)
     end
   elseif event.type == "_process_exit" then
-    -- The agent died mid-run; without this the request waits forever
-    -- A missing code means the process was signalled out of existence
+    -- The agent died mid-run, and without this the request waits forever
     if event.code == nil or event.code ~= 0 then
       self:handle_error(
         ("The agent exited unexpectedly (code %s)"):format(event.code or ("signal %s"):format(event.signal or "?"))
@@ -235,13 +240,11 @@ function RPCHandler:process_event(event)
     end
   end
 
-  -- Content added by an event can push the pending marker off the buffer end,
-  -- so the queue is redrawn here on every event
+  -- Added content can push the marker off the buffer end, so the queue is redrawn on every event
   self.chat:_set_pending_steers(self._steering)
 end
 
----Turn the agent's steering queue into buffer state, promoting what has been
----delivered to a user message
+---Turn the agent's steering queue into buffer state, promoting what it has delivered
 ---@param event table
 ---@return nil
 function RPCHandler:handle_queue_update(event)
@@ -358,7 +361,7 @@ function RPCHandler:process_tool_event(event, status)
 
   local call = self:_merge_tool_event(event)
   local id = call.toolCallId
-  local content = self:_tool_label(call, status)
+  local content = self:_tool_label(call)
   local finished = status == "completed" or status == "failed"
 
   if finished then
@@ -408,8 +411,7 @@ function RPCHandler:process_tool_event(event, status)
   end
 end
 
----Keep the name and arguments a tool call started with, as pi only sends them
----once and later events carry just the result
+---Keep the name and arguments a tool call started with, as later events carry only the result
 ---@param event table
 ---@return table
 function RPCHandler:_merge_tool_event(event)
@@ -432,10 +434,9 @@ end
 
 ---Format a tool event for the chat buffer, never raising on a malformed event
 ---@param event table
----@param status string
 ---@return string
-function RPCHandler:_tool_label(event, status)
-  local ok, content = pcall(formatter.tool_message, vim.tbl_extend("force", event, { status = status }))
+function RPCHandler:_tool_label(event)
+  local ok, content = pcall(formatter.tool_message, event)
   if not ok then
     return "[Error formatting tool output]"
   end
@@ -454,7 +455,10 @@ function RPCHandler:_track_edited_file(event, status)
 
   local path = type(event.args) == "table" and event.args.path
   if type(path) == "string" and path ~= "" then
-    utils.fire("FileEdited", { path = path, tool = self.chat.adapter.name })
+    utils.fire("FileEdited", {
+      path = vim.fs.normalize(vim.fn.fnamemodify(path, ":p")),
+      tool = self.chat.adapter.name,
+    })
   end
 end
 
@@ -508,7 +512,7 @@ end
 ---@return nil
 function RPCHandler:_refresh_session_stats()
   local conn = self.chat.rpc_connection
-  if not conn then
+  if not conn or not conn:supports_session_stats() then
     return
   end
   async.sync(function()

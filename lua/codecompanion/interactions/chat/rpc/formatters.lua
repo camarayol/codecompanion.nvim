@@ -1,13 +1,3 @@
---[[
-===============================================================================
-    File:       codecompanion.interactions/chat/rpc/formatters.lua
--------------------------------------------------------------------------------
-    Description:
-      Formats RPC tool execution events into a single-line label for the chat
-      buffer.
--------------------------------------------------------------------------------
---]]
-
 local markdown = require("codecompanion.utils.markdown")
 local utils = require("codecompanion.utils")
 
@@ -15,8 +5,7 @@ local M = {}
 
 local MAX_TEXT = 100
 
--- pi's own tools each name their subject differently, so a search is best
--- described by its pattern rather than by the path it runs in
+-- pi's own tools each name their subject differently, so a search reads best by its pattern
 local TARGET_ARG = {
   bash = "command",
   edit = "path",
@@ -145,7 +134,6 @@ function M.history_message(call, result)
   local label = M.tool_message({
     toolName = call.name,
     args = call.arguments,
-    status = status,
     result = result and { content = result.content },
   })
 

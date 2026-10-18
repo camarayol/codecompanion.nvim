@@ -860,7 +860,7 @@ function Chat:change_adapter(args)
     helpers.create_acp_connection(self, args.callback)
     helpers.remove_mcp_tools(self)
   elseif self.adapter.type == "rpc" then
-    helpers.create_rpc_connection(self, cb)
+    helpers.create_rpc_connection(self, args.callback)
     helpers.remove_mcp_tools(self)
   else
     if args.callback then

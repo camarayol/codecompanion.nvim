@@ -12,6 +12,9 @@ local TIMEOUTS = {
   GRACE_EXIT = 3e3, -- 3 seconds to let an agent shut down after stdin closes
 }
 
+-- A response nobody collects would otherwise sit in memory for the life of the process
+local MAX_UNCOLLECTED_RESPONSES = 32
+
 local api = vim.api
 local uv = vim.uv
 
@@ -182,8 +185,7 @@ function Connection:start_agent_process()
     log:info("[rpc] RPC log: %s", self._rpc_log.path)
   end
 
-  -- A reconnect can start a second process before the first has exited; the
-  -- token lets the first's exit be told apart from the live one
+  -- A reconnect can start a second process before the first exits, so the token tells their exits apart
   local process_token = {}
   self._process_token = process_token
 
@@ -314,6 +316,8 @@ function Connection:ensure_session()
         self._models = (models.data and models.data.models) or {}
       end
 
+      self:_apply_default_model()
+
       self._session_established = true
       return true
     end,
@@ -331,6 +335,22 @@ function Connection:_apply_state(state)
   self.session_file = state.sessionFile
   self._current_model_id = state.model and state.model.id or nil
   self._session_stats = nil
+end
+
+---Switch the agent to the model the adapter was configured with, when it named one
+---@return nil
+function Connection:_apply_default_model()
+  local defaults = (self.adapter_modified and self.adapter_modified.defaults) or {}
+  local model_id = defaults.model
+
+  if type(model_id) ~= "string" or model_id == "" or model_id == self._current_model_id then
+    return
+  end
+  if vim.tbl_isempty(self._models or {}) then
+    return log:warn("[rpc::_apply_default_model] The agent listed no models, so `%s` was not set", model_id)
+  end
+
+  self:set_model(model_id)
 end
 
 ---Send a command to the agent process
@@ -361,8 +381,7 @@ function Connection:send_command(command_type, fields)
   return self:wait_for_response(id)
 end
 
----Register an async response callback behind a deadline, so an agent that
----accepts the process but never responds can't wedge a submission forever
+---Register an async response callback behind a deadline, so a silent agent can't wedge a submission
 ---@param id string
 ---@param callback function
 ---@return nil
@@ -432,18 +451,13 @@ function Connection:prompt(formatted)
   return self:send_command("prompt", fields)
 end
 
----Abort the agent's current run without waiting for a response
----pi only answers abort once its session is idle, which can outlast the
----caller (Chat:stop runs on the main loop) and the response is never used,
----as the caller has already marked the request finished
+---Abort the agent's run without waiting for an answer, as pi only answers once it is idle
 ---@return boolean
 function Connection:abort()
   return self:write_message(self.methods.encode({ type = "abort" }) .. "\n")
 end
 
----Queue a steering message for the agent's running turn
----The agent answers without a request ID to correlate against, so the caller
----does not wait on it
+---Queue a steering message; the agent answers without an ID, so nothing is waited on
 ---@param message string
 ---@return boolean
 function Connection:steer(message)
@@ -453,8 +467,7 @@ function Connection:steer(message)
   return self:write_message(self.methods.encode({ type = "steer", message = message }) .. "\n")
 end
 
----Switch the agent to a previous session and refresh our view of its state
----An extension may veto the switch, which reports as cancelled on a success
+---Switch the agent to a previous session, unless an extension vetoes the switch
 ---@param session_path string
 ---@return boolean success
 function Connection:load_session(session_path)
@@ -509,9 +522,20 @@ function Connection:get_session_stats()
   return self._session_stats
 end
 
+---Whether the adapter's agent reports token, cost and context statistics
+---@return boolean
+function Connection:supports_session_stats()
+  local opts = self.adapter.opts or {}
+  return opts.session_stats == true
+end
+
 ---Fetch and cache the session's token, cost and context statistics
 ---@return nil
 function Connection:refresh_session_stats()
+  if not self:supports_session_stats() then
+    return
+  end
+
   local response = self:send_command("get_session_stats")
   if response and response.success then
     self._session_stats = response.data
@@ -553,22 +577,19 @@ function Connection:set_event_handler(handler)
   self._event_handler = handler
 end
 
----Disconnect and clean up the agent process
----By default the stdin is closed first, as pi treats that as an orderly
----shutdown request, and SIGTERM follows only if the process hasn't exited.
----Neovim teardown can't wait, so pass { graceful = false } to kill immediately
+---Disconnect the agent, closing its stdin first unless `{ graceful = false }` kills it now
 ---@param opts? { graceful?: boolean }
 ---@return nil
 function Connection:disconnect(opts)
   opts = opts or {}
 
-  -- Mark the connection not ready straight away, so a later connect restarts
-  -- the process rather than reusing one that is being shut down
+  -- Drop the handle straight away, so nothing writes into a process that is shutting down
+  local handle = self._state.handle
+  self._state.handle = nil
   self._connected = false
   self._session_established = false
   self:_clear_exit_autocmd()
 
-  local handle = self._state.handle
   if not handle then
     return
   end
@@ -583,6 +604,7 @@ function Connection:disconnect(opts)
     end)
   end
 
+  -- pi treats a closed stdin as an orderly shutdown, so SIGTERM only follows if it stays up
   if not close_input or opts.graceful == false then
     kill()
     return
@@ -661,6 +683,17 @@ function Connection:store_response(response)
 
   -- Sync path: store for polling under the same string ID send_command used
   self.pending_responses[id] = response
+
+  -- IDs count up in the order commands are sent, so the smallest has waited longest
+  if vim.tbl_count(self.pending_responses) > MAX_UNCOLLECTED_RESPONSES then
+    local oldest
+    for pending_id in pairs(self.pending_responses) do
+      if pending_id ~= id and (not oldest or tonumber(pending_id) < tonumber(oldest)) then
+        oldest = pending_id
+      end
+    end
+    self.pending_responses[oldest] = nil
+  end
 end
 
 ---Answer a blocking dialog with a cancellation so the agent isn't left waiting
@@ -684,7 +717,7 @@ end
 ---@return boolean
 function Connection:write_message(data)
   if not self._state.handle then
-    log:error("[rpc::write_message] Process not running")
+    log:debug("[rpc::write_message] The agent process is not running")
     return false
   end
 
@@ -721,24 +754,18 @@ function Connection:handle_process_exit(code, signal, process_token)
     rpc_adapter.call_handler(self.adapter_modified, "on_exit", { code = code })
   end
 
-  -- Fire any pending async callbacks so coroutines don't hang
-  for id, cb in pairs(self._pending_callbacks) do
-    self._pending_callbacks[id] = nil
-    pcall(cb, nil)
-  end
+  local event_handler = self._event_handler
+  local pending_callbacks = self._pending_callbacks
+  self._event_handler = nil
+  self._pending_callbacks = {}
+  self.pending_responses = {}
 
-  -- Let the active request know the agent is gone, or it waits for a settle that never comes
-  if self._event_handler then
-    local handler = self._event_handler
-    self._event_handler = nil
-    pcall(handler, { type = "_process_exit", code = code, signal = signal })
-  end
-
+  -- Clear the connection first, so a listener that submits again reconnects instead of writing to a dead process
   self._state.handle = nil
   self._connected = false
   self._session_established = false
-  self._pending_callbacks = {}
-  self.pending_responses = {}
+  self.adapter_modified = nil
+  self:_clear_exit_autocmd()
 
   -- The responses can never arrive now, so the timers have no purpose
   for id, timer in pairs(self._deadlines) do
@@ -749,8 +776,16 @@ function Connection:handle_process_exit(code, signal, process_token)
     self._deadlines[id] = nil
   end
 
-  self.adapter_modified = nil
-  self:_clear_exit_autocmd()
+  -- Resume the waiting coroutines, or they hang on a response that will never come
+  for id, callback in pairs(pending_callbacks) do
+    pending_callbacks[id] = nil
+    pcall(callback, nil)
+  end
+
+  -- Let the active request know the agent is gone, or it waits for a settle that never comes
+  if event_handler then
+    pcall(event_handler, { type = "_process_exit", code = code, signal = signal })
+  end
 end
 
 return Connection

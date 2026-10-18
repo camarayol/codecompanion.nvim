@@ -172,15 +172,15 @@ function Debug:render()
         table.insert(
           lines,
           "--   Tokens: input="
-            .. (tokens.input or 0)
+            .. tostring(tokens.input or 0)
             .. " output="
-            .. (tokens.output or 0)
+            .. tostring(tokens.output or 0)
             .. " cacheRead="
-            .. (tokens.cacheRead or 0)
+            .. tostring(tokens.cacheRead or 0)
             .. " cacheWrite="
-            .. (tokens.cacheWrite or 0)
+            .. tostring(tokens.cacheWrite or 0)
             .. " total="
-            .. (tokens.total or 0)
+            .. tostring(tokens.total or 0)
         )
 
         if stats.cost then

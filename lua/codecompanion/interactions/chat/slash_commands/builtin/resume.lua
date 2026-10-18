@@ -20,8 +20,7 @@ end
 ---@param chat CodeCompanion.Chat
 ---@return boolean,string
 function SlashCommand.enabled(chat)
-  -- RPC agents keep sessions in their own store. The protocol has no listing
-  -- command, so only agents that persist pi-compatible session files can resume
+  -- Only agents that persist pi-compatible session files can list and resume
   if chat.adapter and chat.adapter.type == "rpc" then
     if require("codecompanion.adapters.rpc.sessions").enabled(chat.adapter) then
       return true, ""
@@ -123,8 +122,7 @@ end
 local function select_rpc_session(self)
   local Chat = self.Chat
 
-  -- Connect first so the agent can report its session file, which is what
-  -- locates pi's session root and the active project
+  -- Connect first, as the agent's session file locates pi's root and the active project
   require("codecompanion.interactions.chat.helpers").create_rpc_connection(Chat, function()
     local rpc_sessions = require("codecompanion.adapters.rpc.sessions")
     local conn = Chat.rpc_connection
@@ -186,10 +184,6 @@ function SlashCommand:execute()
 
   if Chat.submitted then
     return utils.notify("The /resume command must be called before submitting any messages", vim.log.levels.WARN)
-  end
-
-  if not Chat.acp_connection then
-    return utils.notify("No ACP connection available", vim.log.levels.WARN)
   end
 
   local sessions = Chat.acp_connection:session_list({

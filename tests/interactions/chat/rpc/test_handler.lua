@@ -28,6 +28,7 @@ T["RPC Handler"] = new_set({
             prompt = function() return { success = true, data = {} } end,
             abort = function() aborted = (aborted or 0) + 1 end,
             refresh_session_stats = function() refreshed = (refreshed or 0) + 1 end,
+            supports_session_stats = function() return true end,
           }
 
           local chat = {
@@ -192,6 +193,38 @@ T["RPC Handler"]["submit()"]["shows an error when the adapter has no build_messa
   h.eq(result.error:find("build_messages", 1, true) ~= nil, true)
   h.eq(result.started, 0)
   h.eq(result.finished, 0)
+end
+
+T["RPC Handler"]["submit()"]["aborts the run when the prompt never answers"] = function()
+  local result = child.lua([[
+    local handler = require("codecompanion.interactions.chat.rpc.handler").new(fake_chat())
+    local chat = handler.chat
+    chat.rpc_connection.prompt = function() return nil end
+
+    handler:submit({ messages = {} })
+
+    return { abort = aborted or 0, status = chat.status, error = chat.completed[1] and chat.completed[1].error }
+  ]])
+
+  h.eq(result.abort, 1)
+  h.eq(result.status, "error")
+  h.eq(result.error, "The agent did not answer the prompt")
+end
+
+T["RPC Handler"]["submit()"]["DOES NOT abort a prompt the agent answered with a rejection"] = function()
+  local result = child.lua([[
+    local handler = require("codecompanion.interactions.chat.rpc.handler").new(fake_chat())
+    local chat = handler.chat
+    chat.rpc_connection.prompt = function() return { success = false, error = "Session is busy" } end
+
+    handler:submit({ messages = {} })
+
+    return { abort = aborted or 0, status = chat.status, error = chat.completed[1] and chat.completed[1].error }
+  ]])
+
+  h.eq(result.abort, 0)
+  h.eq(result.status, "error")
+  h.eq(result.error, "Session is busy")
 end
 
 T["RPC Handler"]["message_end"] = new_set()
@@ -421,7 +454,7 @@ T["RPC Handler"]["tool events"]["names a search by its pattern rather than its d
   h.eq(result.line, "grep: TODO")
 end
 
-T["RPC Handler"]["tool events"]["reports the file an edit tool changed"] = function()
+T["RPC Handler"]["tool events"]["reports the file an edit tool changed as an absolute path"] = function()
   local result = child.lua([[
     local handler = require("codecompanion.interactions.chat.rpc.handler").new(fake_chat())
 
@@ -440,11 +473,16 @@ T["RPC Handler"]["tool events"]["reports the file an edit tool changed"] = funct
     })
 
     local edited = edited_files()
-    return { count = #edited, path = edited[1] and edited[1].path, tool = edited[1] and edited[1].tool }
+    return {
+      count = #edited,
+      path = edited[1] and edited[1].path,
+      expected = vim.fs.normalize(vim.fn.fnamemodify("lua/codecompanion/rpc/sessions.lua", ":p")),
+      tool = edited[1] and edited[1].tool,
+    }
   ]])
 
   h.eq(result.count, 1)
-  h.eq(result.path, "lua/codecompanion/rpc/sessions.lua")
+  h.eq(result.path, result.expected)
   h.eq(result.tool, "pi")
 end
 

@@ -12,6 +12,7 @@ local shared = require("codecompanion.adapters.shared")
 ---@field opts? table Additional options for the adapter
 ---@field opts.resume_sessions? boolean Whether /resume can read the agent's session files from disk
 ---@field opts.session_flag? string The flag that reopens an existing session file on reconnect
+---@field opts.session_stats? boolean Whether the agent answers with token, cost and context statistics
 ---@field opts.vision? boolean Whether the agent accepts images
 ---@field defaults? table Additional options for the adapter
 ---@field env? table Environment variables which can be referenced in the command
@@ -107,7 +108,7 @@ end
 
 ---Resolve an adapter from deep within the plugin...somewhere
 ---@param adapter? CodeCompanion.RPCAdapter|string|function
----@param opts? table
+---@param opts? { model?: string }
 ---@return CodeCompanion.RPCAdapter
 function Adapter.resolve(adapter, opts)
   adapter = adapter or config.interactions.chat.adapter
@@ -116,10 +117,10 @@ function Adapter.resolve(adapter, opts)
   local key = type(adapter) == "string" and adapter or nil
 
   if type(adapter) == "table" then
-    -- Handle { name = "pi" } style config
+    -- Handle { name = "pi", model = "..." } style config
     if adapter.name and not adapter.type then
       log:trace("[adapters::rpc::resolve] Table adapter: %s", adapter.name)
-      return Adapter.resolve(adapter.name)
+      return Adapter.resolve(adapter.name, { model = adapter.model })
     end
 
     adapter = Adapter.new(adapter)
@@ -127,12 +128,18 @@ function Adapter.resolve(adapter, opts)
     if not config.adapters.rpc or not config.adapters.rpc[adapter] then
       return log:error("[adapters::rpc::resolve] Adapter not found: %s", adapter)
     end
-    adapter = Adapter.extend(config.adapters.rpc[adapter] or adapter)
+    adapter = Adapter.extend(config.adapters.rpc[adapter])
   elseif type(adapter) == "function" then
     adapter = adapter()
   end
 
   shared.apply_extend(adapter, { extend = config.adapters.rpc.extend, key = key })
+
+  -- Applied by the connection once the agent has reported the models it offers
+  if opts.model then
+    adapter.defaults = adapter.defaults or {}
+    adapter.defaults.model = opts.model
+  end
 
   if adapter.commands and adapter.commands.default then
     adapter.commands.selected = adapter.commands.default

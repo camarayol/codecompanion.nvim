@@ -1,17 +1,3 @@
---[[
-===============================================================================
-    File:       codecompanion/adapters/rpc/sessions.lua
--------------------------------------------------------------------------------
-    Description:
-      Scans pi's on-disk session files so RPC agents can offer /resume. The
-      RPC protocol itself has no session listing command, only switch_session,
-      which needs a session path. pi persists its sessions as JSONL under
-      ~/.pi/agent/sessions, grouped into one folder per working directory.
-
-      Ref: https://pi.dev/docs/latest/session-format
--------------------------------------------------------------------------------
---]]
-
 local log = require("codecompanion.utils.log")
 local utils = require("codecompanion.utils")
 
@@ -19,12 +5,10 @@ local M = {}
 
 local MAX_SESSIONS = 50
 local TITLE_LENGTH = 80
--- A title is found in the first few entries of a session, so the scan is bounded
--- rather than reading every line of every file
+-- A title is in the first few entries, so the scan needn't read every line of every file
 local MAX_SCAN_LINES = 200
 
----Whether this adapter's sessions can be listed from disk and resumed. Only
----agents that persist pi-compatible session files opt in
+---Whether this adapter persists pi-compatible session files that /resume can list
 ---@param adapter? CodeCompanion.RPCAdapter
 ---@return boolean
 function M.enabled(adapter)
@@ -67,9 +51,7 @@ local function message_text(content)
   return nil
 end
 
----Extract display metadata from a session file. The first line is the header,
----and the rest is an entry tree which we scan for a title: an explicit session
----name wins, then the first user message, then a compaction summary
+---Extract a session's display title and ids from its file
 ---@param path string
 ---@return table|nil metadata { path, sessionId, updatedAt, cwd, title }
 local function read_metadata(path)
@@ -133,8 +115,7 @@ function M.root(session_file)
     return nil
   end
 
-  -- pi groups sessions into a folder per working directory, so the session
-  -- file's grandparent is pi's sessions root
+  -- pi groups sessions into a folder per working directory, so the file's grandparent is pi's root
   return vim.fs.dirname(vim.fs.dirname(session_file))
 end
 
@@ -142,9 +123,7 @@ local function by_mtime(a, b)
   return a.mtime > b.mtime
 end
 
----List the active project's sessions from disk, newest first. pi groups
----sessions into a folder per working directory, so the agent's session file
----marks the project the user is in
+---List the active project's sessions from disk, newest first
 ---@param opts? { session_file?: string, root?: string }
 ---@return table[] sessions { path, sessionId, updatedAt, cwd, title }
 function M.list(opts)

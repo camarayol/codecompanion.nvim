@@ -129,6 +129,8 @@ require("codecompanion").setup({
             resume_sessions = true,
             -- The flag that reopens the active session file when the process restarts
             session_flag = "--session",
+            -- Opt in to token, cost and context statistics in the debug window
+            session_stats = true,
           },
           handlers = {
             lifecycle = {
@@ -152,6 +154,8 @@ require("codecompanion").setup({
 
 > [!NOTE]
 > `build_messages` returns a `{ message, images? }` table rather than a list of messages. The agent keeps its own conversation state, so CodeCompanion only sends the messages the agent hasn't seen yet.
+
+Token, cost and context statistics are off by default. Set `opts.session_stats = true` when the agent answers `get_session_stats`, and CodeCompanion shows its figures in the [debug window](/usage/chat-buffer/#debug-window) after each turn. Adapters that don't implement the command leave the figures out.
 
 ## Limitations
 
