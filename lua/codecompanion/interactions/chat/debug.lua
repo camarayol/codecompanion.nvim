@@ -131,11 +131,6 @@ function Debug:render()
         if opt.type == "select" and opt.currentValue then
           local flattened = ACP.flatten_config_options(opt.options or {})
 
-          local available = vim.tbl_map(function(val)
-            return val.name or val.value
-          end, flattened)
-          table.sort(available)
-
           local current_name = opt.currentValue
           for _, val in ipairs(flattened) do
             if val.value == opt.currentValue then
@@ -149,40 +144,26 @@ function Debug:render()
             label = label .. " [" .. opt.category .. "]"
           end
 
-          table.insert(
-            lines,
-            "--   " .. label .. ': "' .. current_name .. '" (Available: ' .. table.concat(available, ", ") .. ")"
-          )
+          table.insert(lines, "--   " .. label .. ': "' .. current_name .. '"')
         end
       end
     elseif adapter.type == "rpc" and self.chat.rpc_connection then
       local rpc_models = self.chat.rpc_connection:get_models()
-      local available_models = rpc_models and rpc_models.availableModels or {}
 
-      if #available_models > 0 then
+      if rpc_models then
         local function get_model_name(model)
           return model.name or model.id or model.modelId
         end
 
-        local available = vim.tbl_map(get_model_name, available_models)
-        table.sort(available)
-
         local current_name = rpc_models.currentModelId
-        for _, model in ipairs(available_models) do
+        for _, model in ipairs(rpc_models.availableModels or {}) do
           if (model.id or model.modelId) == rpc_models.currentModelId then
             current_name = get_model_name(model)
             break
           end
         end
 
-        table.insert(
-          lines,
-          "--   Model: "
-            .. string.format("%q", current_name or "unknown")
-            .. " (Available: "
-            .. table.concat(available, ", ")
-            .. ")"
-        )
+        table.insert(lines, "--   Model: " .. string.format("%q", current_name or "unknown"))
       end
 
       local stats = self.chat.rpc_connection:get_session_stats()
@@ -364,7 +345,7 @@ function Debug:render()
         end
       end
       if #self.excluded_messages > 0 then
-        table.insert(lines, "-- NOTE: ACP doesn't accept a system prompt, so they're not sent")
+        table.insert(lines, "-- NOTE: ACP/RPC doesn't accept a system prompt, so they're not sent")
       end
     end
 
