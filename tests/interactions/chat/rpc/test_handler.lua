@@ -27,6 +27,7 @@ T["RPC Handler"] = new_set({
             set_event_handler = function() end,
             prompt = function() return { success = true, data = {} } end,
             abort = function() aborted = (aborted or 0) + 1 end,
+            refresh_session_stats = function() refreshed = (refreshed or 0) + 1 end,
           }
 
           local chat = {
@@ -331,6 +332,18 @@ T["RPC Handler"]["agent_settled"]["marks an aborted run as stopped"] = function(
   ]])
 
   h.eq(result.status, "stopped")
+end
+
+T["RPC Handler"]["agent_settled"]["refreshes the session statistics after the request"] = function()
+  local result = child.lua([[
+    local handler = require("codecompanion.interactions.chat.rpc.handler").new(fake_chat())
+    handler:submit({ messages = {} })
+    handler:process_event({ type = "agent_settled", aborted = false })
+
+    return { refreshed = refreshed or 0 }
+  ]])
+
+  h.eq(result.refreshed, 1)
 end
 
 T["RPC Handler"]["tool events"] = new_set()

@@ -184,6 +184,42 @@ function Debug:render()
             .. ")"
         )
       end
+
+      local stats = self.chat.rpc_connection:get_session_stats()
+      if stats then
+        local tokens = stats.tokens or {}
+        table.insert(
+          lines,
+          "--   Tokens: input="
+            .. (tokens.input or 0)
+            .. " output="
+            .. (tokens.output or 0)
+            .. " cacheRead="
+            .. (tokens.cacheRead or 0)
+            .. " cacheWrite="
+            .. (tokens.cacheWrite or 0)
+            .. " total="
+            .. (tokens.total or 0)
+        )
+
+        if stats.cost then
+          table.insert(lines, "--   Cost: " .. tostring(stats.cost))
+        end
+
+        local context = stats.contextUsage
+        if context then
+          table.insert(
+            lines,
+            "--   Context: "
+              .. (context.tokens or 0)
+              .. "/"
+              .. (context.contextWindow or 0)
+              .. " ("
+              .. (context.percent or 0)
+              .. "%)"
+          )
+        end
+      end
     end
   end
 

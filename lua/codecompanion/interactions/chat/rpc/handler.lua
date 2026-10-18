@@ -504,6 +504,18 @@ function RPCHandler:handle_error(error)
   self.chat:done({ output = self.output, error = error })
 end
 
+---Fetch the session statistics after the request, for the debug window
+---@return nil
+function RPCHandler:_refresh_session_stats()
+  local conn = self.chat.rpc_connection
+  if not conn then
+    return
+  end
+  async.sync(function()
+    conn:refresh_session_stats()
+  end)()
+end
+
 ---Fire the completion event for this request
 ---@param status string
 ---@param error? string
@@ -519,6 +531,7 @@ function RPCHandler:_finish(status, error)
   self._event_data.status = status
   self._event_data.error = error
   utils.fire("RequestFinished", self._event_data)
+  self:_refresh_session_stats()
 end
 
 return RPCHandler

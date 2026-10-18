@@ -30,6 +30,7 @@ local uv = vim.uv
 ---@field _deadlines table<string, table> Response timers keyed by request ID, so hung agents can't wedge a submission
 ---@field _models table[] Models advertised by the agent
 ---@field _current_model_id? string
+---@field _session_stats? table Token, cost and context statistics last fetched
 ---@field _event_handler? fun(event: table) Session event listener
 ---@field _rpc_log? { path: string, write: fun(data: string) } Per-connection log capturing raw protocol traffic
 ---@field _process_token? table Identifies the current process, so a replaced process's exit can be ignored
@@ -297,6 +298,7 @@ function Connection:ensure_session()
       end
 
       self:_apply_state(state.data)
+      self:refresh_session_stats()
 
       -- A model list is only needed to power the change-model picker
       local models = self:send_command("get_available_models")
@@ -320,6 +322,7 @@ function Connection:_apply_state(state)
   self.session_id = state.sessionId
   self.session_file = state.sessionFile
   self._current_model_id = state.model and state.model.id or nil
+  self._session_stats = nil
 end
 
 ---Send a command to the agent process
@@ -462,6 +465,7 @@ function Connection:load_session(session_path)
   local state = self:send_command("get_state")
   if state and state.success then
     self:_apply_state(state.data)
+    self:refresh_session_stats()
   end
 
   return true
@@ -489,6 +493,21 @@ function Connection:get_models()
     availableModels = self._models or {},
     currentModelId = self._current_model_id,
   }
+end
+
+---The session statistics last fetched, if any
+---@return table|nil
+function Connection:get_session_stats()
+  return self._session_stats
+end
+
+---Fetch and cache the session's token, cost and context statistics
+---@return nil
+function Connection:refresh_session_stats()
+  local response = self:send_command("get_session_stats")
+  if response and response.success then
+    self._session_stats = response.data
+  end
 end
 
 ---Switch the agent to a different model
