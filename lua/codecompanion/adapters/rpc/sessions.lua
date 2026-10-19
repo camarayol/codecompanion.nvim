@@ -8,6 +8,22 @@ local TITLE_LENGTH = 80
 -- A title is in the first few entries, so the scan needn't read every line of every file
 local MAX_SCAN_LINES = 200
 
+local is_windows = vim.fn.has("win32") == 1
+
+---Compare two paths the way the filesystem does
+---@param left string
+---@param right string
+---@return boolean
+local function same_path(left, right)
+  left = vim.fs.normalize(left)
+  right = vim.fs.normalize(right)
+  if is_windows then
+    left = left:lower()
+    right = right:lower()
+  end
+  return left == right
+end
+
 ---Whether this adapter persists pi-compatible session files that /resume can list
 ---@param adapter? CodeCompanion.RPCAdapter
 ---@return boolean
@@ -147,7 +163,7 @@ function M.list(opts)
       local path = vim.fs.joinpath(root, name)
       local stat = vim.uv.fs_stat(path)
       -- Other projects and the live session are not things to resume
-      if stat and vim.fs.dirname(path) == project_dir and path ~= opts.session_file then
+      if stat and same_path(vim.fs.dirname(path), project_dir) and not same_path(path, opts.session_file) then
         table.insert(files, { path = path, mtime = stat.mtime.sec })
       end
     end
