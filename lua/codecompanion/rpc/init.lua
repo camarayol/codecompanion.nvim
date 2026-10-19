@@ -39,6 +39,7 @@ end
 ---@field _deadlines table<string, table> Response timers keyed by request ID, so hung agents can't wedge a submission
 ---@field _models table[] Models advertised by the agent
 ---@field _current_model_id? string
+---@field _current_model_provider? string
 ---@field _session_stats? table Token, cost and context statistics last fetched
 ---@field _event_handler? fun(event: table) Session event listener
 ---@field _rpc_log? { path: string, write: fun(data: string) } Per-connection log capturing raw protocol traffic
@@ -334,6 +335,7 @@ function Connection:_apply_state(state)
   self.session_id = state.sessionId
   self.session_file = state.sessionFile
   self._current_model_id = state.model and state.model.id or nil
+  self._current_model_provider = state.model and state.model.provider or nil
   self._session_stats = nil
 end
 
@@ -504,7 +506,7 @@ function Connection:get_messages()
 end
 
 ---Get the models the agent advertised
----@return { availableModels: table[], currentModelId: string|nil }|nil
+---@return { availableModels: table[], currentModelId: string|nil, currentModelProvider: string|nil }|nil
 function Connection:get_models()
   if not self._models and not self._current_model_id then
     return nil
@@ -513,6 +515,7 @@ function Connection:get_models()
   return {
     availableModels = self._models or {},
     currentModelId = self._current_model_id,
+    currentModelProvider = self._current_model_provider,
   }
 end
 
@@ -544,18 +547,19 @@ end
 
 ---Switch the agent to a different model
 ---@param model_id string
+---@param provider? string
 ---@return boolean success
-function Connection:set_model(model_id)
+function Connection:set_model(model_id, provider)
   local model
   for _, candidate in ipairs(self._models or {}) do
-    if candidate.id == model_id then
+    if candidate.id == model_id and (not provider or candidate.provider == provider) then
       model = candidate
       break
     end
   end
 
   if not model then
-    log:error("[rpc::set_model] `%s` is not one of the models the agent reported", model_id)
+    log:error("[rpc::set_model] `%s/%s` is not one of the models the agent reported", provider or "?", model_id)
     return false
   end
 
@@ -566,7 +570,8 @@ function Connection:set_model(model_id)
   end
 
   self._current_model_id = (response.data and response.data.id) or model_id
-  log:debug("[rpc::set_model] Switched model to %s", self._current_model_id)
+  self._current_model_provider = (response.data and response.data.provider) or model.provider
+  log:debug("[rpc::set_model] Switched model to %s/%s", self._current_model_provider, self._current_model_id)
   return true
 end
 

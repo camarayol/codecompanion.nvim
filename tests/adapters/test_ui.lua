@@ -178,6 +178,39 @@ T["Adapter UI"]["select_model marks the current ACP model and returns the picked
   h.eq("opus", result.model_id)
 end
 
+T["Adapter UI"]["select_model shows the provider for RPC models with the same id"] = function()
+  local result = child.lua([[
+    h.setup_plugin()
+
+    local picked = {}
+    vim.ui.select = function(items, opts, on_choice)
+      picked.labels = vim.tbl_map(opts.format_item, items)
+      on_choice(items[2])
+    end
+
+    adapter_ui.select_model({
+      adapter = { type = "rpc" },
+      rpc_models = {
+        availableModels = {
+          { id = "default", provider = "openai" },
+          { id = "default", provider = "anthropic" },
+        },
+        currentModelId = "default",
+        currentModelProvider = "openai",
+      },
+      on_choice = function(model_id, provider)
+        picked.model_id = model_id
+        picked.provider = provider
+      end,
+    })
+    return picked
+  ]])
+
+  h.eq({ "* openai/default", "  anthropic/default" }, result.labels)
+  h.eq("default", result.model_id)
+  h.eq("anthropic", result.provider)
+end
+
 T["Adapter UI"]["select_model DOES NOT open the picker for a single ACP model"] = function()
   local result = child.lua([[
     h.setup_plugin()

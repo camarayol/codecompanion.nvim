@@ -22,9 +22,9 @@ local function select_model(chat)
     adapter = chat.adapter,
     acp_models = chat.adapter.type == "acp" and chat.acp_connection:get_models() or nil,
     rpc_models = chat.adapter.type == "rpc" and chat.rpc_connection:get_models() or nil,
-    on_choice = function(model_id)
+    on_choice = function(model_id, provider)
       if model_id then
-        chat:change_model({ model = model_id })
+        chat:change_model({ model = model_id, provider = provider })
       end
     end,
   })

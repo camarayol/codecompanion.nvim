@@ -174,10 +174,10 @@ function Adapter.make_safe(adapter)
 end
 
 ---Set the model used by the agent
----@param args { rpc_connection: CodeCompanion.RPC.Connection, adapter: CodeCompanion.RPCAdapter, model: string }
+---@param args { rpc_connection: CodeCompanion.RPC.Connection, adapter: CodeCompanion.RPCAdapter, model: string, provider?: string }
 ---@return boolean
 function Adapter.set_model(args)
-  return args.rpc_connection:set_model(args.model)
+  return args.rpc_connection:set_model(args.model, args.provider)
 end
 
 return Adapter

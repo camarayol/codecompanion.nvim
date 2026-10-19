@@ -885,6 +885,7 @@ function Chat:change_model(args)
       rpc_connection = self.rpc_connection,
       adapter = self.adapter,
       model = args.model,
+      provider = args.provider,
     })
   end
 

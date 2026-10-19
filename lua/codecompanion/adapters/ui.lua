@@ -18,7 +18,10 @@ local function get_model_label(model, opts)
   if type(model) ~= "table" then
     return model
   end
-  if opts.adapter.type == "acp" or opts.adapter.type == "rpc" then
+  if opts.adapter.type == "rpc" then
+    return fmt("%s/%s", model.provider, model.id)
+  end
+  if opts.adapter.type == "acp" then
     return model.description and fmt("%s - %s", model.name, model.description) or model.name
   end
   return model.description or model.formatted_name or model.id
@@ -127,16 +130,17 @@ function M.select_adapter(opts)
 end
 
 ---Pick one of the adapter's models, calling `on_choice` with nil when there's only one
----@param opts { adapter: CodeCompanion.HTTPAdapter|CodeCompanion.ACPAdapter|CodeCompanion.RPCAdapter, acp_models?: { availableModels: table[], currentModelId: string }, rpc_models?: { availableModels: table[], currentModelId: string }, on_choice: fun(model_id?: string) }
+---@param opts { adapter: CodeCompanion.HTTPAdapter|CodeCompanion.ACPAdapter|CodeCompanion.RPCAdapter, acp_models?: { availableModels: table[], currentModelId: string }, rpc_models?: { availableModels: table[], currentModelId: string, currentModelProvider?: string }, on_choice: fun(model_id?: string, provider?: string) }
 ---@return nil
 function M.select_model(opts)
-  local models, current_id
+  local models, current_id, current_provider
   if opts.adapter.type == "acp" then
     models = opts.acp_models and opts.acp_models.availableModels
     current_id = opts.acp_models and opts.acp_models.currentModelId
   elseif opts.adapter.type == "rpc" then
     models = opts.rpc_models and opts.rpc_models.availableModels
     current_id = opts.rpc_models and opts.rpc_models.currentModelId
+    current_provider = opts.rpc_models and opts.rpc_models.currentModelProvider
   else
     ---@diagnostic disable-next-line: param-type-mismatch
     models = M.list_http_models(opts.adapter)
@@ -151,10 +155,12 @@ function M.select_model(opts)
     prompt = "Select Model",
     kind = "codecompanion.nvim",
     format_item = function(model)
-      return (get_model_id(model) == current_id and "* " or "  ") .. get_model_label(model, opts)
+      local is_current = get_model_id(model) == current_id
+        and (opts.adapter.type ~= "rpc" or model.provider == current_provider)
+      return (is_current and "* " or "  ") .. get_model_label(model, opts)
     end,
   }, function(model)
-    opts.on_choice(model and get_model_id(model))
+    opts.on_choice(model and get_model_id(model), model and model.provider)
   end)
 end
 
